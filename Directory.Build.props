@@ -1,0 +1,26 @@
+<Project>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>CS1591</WarningsNotAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <NeutralLanguage>en</NeutralLanguage>
+    <Product>SIDM</Product>
+    <Company>Snw</Company>
+    <Authors>Snw</Authors>
+    <Version>0.1.0</Version>
+    <FileVersion>0.1.0.0</FileVersion>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <Copyright>Copyright (c) Snw</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

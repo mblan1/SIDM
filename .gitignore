@@ -1,0 +1,80 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.pidb
+*.userprefs
+*.sln.docstates
+*.svclog
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+*.pfx
+*.publishsettings
+artifacts/
+TestResults/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.iml
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!packages/build/
+project.lock.json
+project.fragment.lock.json
+
+## Build outputs
+*.dll
+*.exe
+*.pdb
+*.cache
+*.tlog
+
+## OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+## App-local
+local.settings.json
+appsettings.Development.json
+*.db
+*.db-shm
+*.db-wal
+
+## Velopack / installer
+Releases/
+*.vpk
+*.nupkg
+
+## Browser extension (built artifacts)
+src/SIDM.Extension.Chrome/dist/
+src/SIDM.Extension.Firefox/dist/
+src/SIDM.Extension.Chrome/node_modules/
+src/SIDM.Extension.Firefox/node_modules/
+
+## Vendored sidecars (download at pack time, do not commit binaries)
+tools/yt-dlp.exe
+tools/ffmpeg.exe
