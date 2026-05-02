@@ -1,0 +1,31 @@
+namespace SIDM.Core.Models;
+
+public class Download
+{
+    public long Id { get; set; }
+    public required string Url { get; set; }
+    public string? EffectiveUrl { get; set; }
+    public required string FileName { get; set; }
+    public required string TargetPath { get; set; }
+    public long? TotalBytes { get; set; }
+    public DownloadStatus Status { get; set; }
+    public DownloadPriority Priority { get; set; } = DownloadPriority.Normal;
+    public long? CategoryId { get; set; }
+    public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? StartedUtc { get; set; }
+    public DateTimeOffset? CompletedUtc { get; set; }
+    public string? Mime { get; set; }
+    public string? ETag { get; set; }
+    public string? LastModified { get; set; }
+    public string? CookiesJson { get; set; }
+    public string? HeadersJson { get; set; }
+    public string? ExpectedHash { get; set; }
+    public string? HashAlgo { get; set; }
+    public string? ErrorMessage { get; set; }
+    public int SegmentCount { get; set; }
+    public SourceKind SourceKind { get; set; } = SourceKind.Direct;
+    public string? Manifest { get; set; }
+    public int RetryCount { get; set; }
+
+    public List<Segment> Segments { get; set; } = [];
+}

@@ -4,7 +4,11 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
-    <AssemblyName>SIDM</AssemblyName>
+    <!-- AssemblyName intentionally not "SIDM" to dodge Vanguard / similar AV that
+         locks newly-created exes by name. End users launch via Start Menu
+         shortcut (created by Velopack with Product="SIDM"), so the on-disk
+         filename doesn't matter. -->
+    <AssemblyName>SIDM.App</AssemblyName>
     <RootNamespace>SIDM.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
