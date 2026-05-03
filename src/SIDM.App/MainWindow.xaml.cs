@@ -9,5 +9,6 @@ public partial class MainWindow : FluentWindow
     {
         InitializeComponent();
         DataContext = viewModel;
+        Loaded += async (_, _) => await viewModel.Downloads.LoadAsync();
     }
 }

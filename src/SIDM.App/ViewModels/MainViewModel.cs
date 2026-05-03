@@ -6,9 +6,12 @@ namespace SIDM.App.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    [ObservableProperty]
-    private string _greeting = string.Format(Strings.Main_Greeting_Format, AppInfo.DisplayName, AppInfo.Version);
+    public DownloadsViewModel Downloads { get; }
 
-    [ObservableProperty]
-    private string _tagline = Strings.Main_Tagline;
+    public MainViewModel(DownloadsViewModel downloads)
+    {
+        Downloads = downloads;
+    }
+
+    public string Title => string.Format(Strings.Main_Greeting_Format, AppInfo.DisplayName, AppInfo.Version);
 }
