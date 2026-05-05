@@ -31,16 +31,19 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<IDownloadRepository, DownloadRepository>();
         services.AddScoped<ISettingsRepository, SettingsRepository>();
 
-        services.AddSingleton<SegmentProgressWriter>(sp =>
-            new SegmentProgressWriter(cs, sp.GetRequiredService<ILogger<SegmentProgressWriter>>()));
-        services.AddSingleton<IDownloadProgressSink>(sp => sp.GetRequiredService<SegmentProgressWriter>());
-        services.AddHostedService(sp => sp.GetRequiredService<SegmentProgressWriter>());
-
+        // Schema initializer runs FIRST (registration order = startup order). It
+        // creates the DB file, applies migrations, and sets WAL pragma so the
+        // SegmentProgressWriter that follows can write straight away.
         services.AddSingleton<IHostedService>(sp =>
             new SqliteSchemaInitializer(
                 sp,
                 sp.GetRequiredService<ILogger<SqliteSchemaInitializer>>(),
                 cs));
+
+        services.AddSingleton<SegmentProgressWriter>(sp =>
+            new SegmentProgressWriter(cs, sp.GetRequiredService<ILogger<SegmentProgressWriter>>()));
+        services.AddSingleton<IDownloadProgressSink>(sp => sp.GetRequiredService<SegmentProgressWriter>());
+        services.AddHostedService(sp => sp.GetRequiredService<SegmentProgressWriter>());
 
         return services;
     }

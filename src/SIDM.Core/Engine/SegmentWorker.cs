@@ -69,18 +69,32 @@ public sealed class SegmentWorker
 
         using (response)
         {
-            if (response.StatusCode == HttpStatusCode.OK)
+            // Single-stream fallback path: we deliberately did NOT send a Range header,
+            // so 200 OK is the expected success status.
+            if (!task.RequestRange)
             {
-                _logger.LogWarning("Segment {Idx}: server returned 200 OK to a Range request — range support is broken on this resource", task.Index);
-                return new SegmentResult(SegmentOutcome.RangeNotHonored, 0);
+                if (response.StatusCode != HttpStatusCode.OK)
+                {
+                    return new SegmentResult(
+                        SegmentOutcome.HttpError, 0,
+                        new HttpRequestException($"Single-stream: expected 200 OK, got {(int)response.StatusCode} {response.StatusCode}"));
+                }
             }
-
-            if (response.StatusCode != HttpStatusCode.PartialContent)
+            else
             {
-                _logger.LogWarning("Segment {Idx}: unexpected status {Status}", task.Index, response.StatusCode);
-                return new SegmentResult(
-                    SegmentOutcome.HttpError, 0,
-                    new HttpRequestException($"Expected 206 Partial Content, got {(int)response.StatusCode} {response.StatusCode}"));
+                if (response.StatusCode == HttpStatusCode.OK)
+                {
+                    _logger.LogWarning("Segment {Idx}: server returned 200 OK to a Range request — range support is broken on this resource", task.Index);
+                    return new SegmentResult(SegmentOutcome.RangeNotHonored, 0);
+                }
+
+                if (response.StatusCode != HttpStatusCode.PartialContent)
+                {
+                    _logger.LogWarning("Segment {Idx}: unexpected status {Status}", task.Index, response.StatusCode);
+                    return new SegmentResult(
+                        SegmentOutcome.HttpError, 0,
+                        new HttpRequestException($"Expected 206 Partial Content, got {(int)response.StatusCode} {response.StatusCode}"));
+                }
             }
 
             try
@@ -121,8 +135,11 @@ public sealed class SegmentWorker
             req.Headers.TryAddWithoutValidation("Cookie", cookieHeader);
         }
 
-        var range = task.RemainingRange;
-        req.Headers.Range = new RangeHeaderValue(range.Start, range.End);
+        if (task.RequestRange)
+        {
+            var range = task.RemainingRange;
+            req.Headers.Range = new RangeHeaderValue(range.Start, range.End);
+        }
         return req;
     }
 

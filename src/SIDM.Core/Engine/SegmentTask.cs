@@ -6,6 +6,11 @@ namespace SIDM.Core.Engine;
 /// One unit of work for a <see cref="SegmentWorker"/>. Captures everything the worker
 /// needs to fetch a byte range and stream it to the file writer.
 /// </summary>
+/// <remarks>
+/// When <see cref="RequestRange"/> is false the worker omits the Range header and
+/// accepts a 200 OK response. This is the single-stream fallback path used when the
+/// server doesn't honor ranges — the "segment" then covers the entire file.
+/// </remarks>
 public sealed record SegmentTask(
     Uri Url,
     int Index,
@@ -15,6 +20,8 @@ public sealed record SegmentTask(
     IReadOnlyDictionary<string, string>? Headers,
     IReadOnlyDictionary<string, string>? Cookies)
 {
+    public bool RequestRange { get; init; } = true;
+
     public ByteRange FullRange => new(StartByte, EndByte);
     public ByteRange RemainingRange => new(StartByte + BytesAlreadyDownloaded, EndByte);
     public bool IsAlreadyComplete => BytesAlreadyDownloaded >= FullRange.Length;

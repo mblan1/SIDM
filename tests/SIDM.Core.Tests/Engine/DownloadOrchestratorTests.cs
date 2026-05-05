@@ -57,13 +57,13 @@ public class DownloadOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Single_segment_used_when_server_does_not_accept_ranges()
+    public async Task Single_stream_path_used_when_server_advertises_no_range_support()
     {
         const int total = 4096;
         var data = new byte[total];
         new Random(7).NextBytes(data);
 
-        // Server returns 200 to GET (no ranges). Probe will see this.
+        // Server responds with HEAD (no Accept-Ranges) and 200 OK to plain GET (no Range header).
         var handler = new FakeHttpMessageHandler(req => req.Method switch
         {
             { } m when m == HttpMethod.Head => HeadResponse(total, acceptsRanges: false),
@@ -81,12 +81,12 @@ public class DownloadOrchestratorTests : IDisposable
             MinSegmentBytes = 1,
         });
 
-        // Without range support our orchestrator falls back to a single GET — but a
-        // single GET hits SegmentWorker which expects 206. So this currently surfaces
-        // as RangeNotHonored. Documenting current behavior; full single-stream
-        // fallback is on the Phase 1.K backlog.
-        result.Success.Should().BeFalse();
-        result.FailureKind.Should().Be(DownloadFailureKind.RangeNotHonored);
+        result.Success.Should().BeTrue($"single-stream path should succeed; failure: {result.FailureKind} {result.FailureMessage}");
+        result.Segments.Should().ContainSingle("single-stream uses one task covering the whole file");
+        result.TotalBytes.Should().Be(total);
+
+        var actual = await File.ReadAllBytesAsync(target);
+        actual.Should().Equal(data);
     }
 
     [Fact]

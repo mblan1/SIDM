@@ -77,7 +77,7 @@ public class RangeDownloadIntegrationTests
     }
 
     [Fact]
-    public async Task Server_lying_about_range_support_surfaces_RangeNotHonored()
+    public async Task Server_lying_about_range_support_falls_back_to_single_stream_and_succeeds()
     {
         using var fx = new IntegrationFixture();
 
@@ -93,10 +93,13 @@ public class RangeDownloadIntegrationTests
             MinSegmentBytes = 1,
         });
 
-        // Current behavior: orchestrator surfaces RangeNotHonored when a worker gets
-        // 200 OK to a Range request. Single-stream fallback is on the backlog.
-        result.Success.Should().BeFalse();
-        result.FailureKind.Should().Be(DownloadFailureKind.RangeNotHonored);
+        // Probe sees Accept-Ranges: bytes (server lies), so we try multi-segment.
+        // First worker gets 200 OK to its Range request → orchestrator detects the
+        // lie, cancels the rest, and retries as a single stream.
+        result.Success.Should().BeTrue($"failure: {result.FailureKind} {result.FailureMessage}");
+        result.TotalBytes.Should().Be(data.Length);
+        var actual = await File.ReadAllBytesAsync(fx.PathFor("lying.bin"));
+        actual.Should().Equal(data);
     }
 
     [Fact]

@@ -33,6 +33,10 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<UiProgressBus>(),
             }));
 
+        // Lifecycle services — auto-resume orphans on launch, graceful pause on shutdown.
+        services.AddHostedService<DownloadAutoResumeService>();
+        services.AddHostedService<GracefulShutdownService>();
+
         // ViewModels + Windows
         services.AddSingleton<MainWindow>();
         services.AddSingleton<MainViewModel>();
