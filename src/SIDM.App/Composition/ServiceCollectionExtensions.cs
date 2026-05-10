@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<GracefulShutdownService>();
 
         // IPC: named-pipe server for SIDM.BrowserHost (browser extension bridge).
+        services.AddSingleton<DownloadCreatedNotifier>();
         services.AddSingleton<IpcDispatcher>();
         services.AddHostedService<IpcPipeServer>();
 

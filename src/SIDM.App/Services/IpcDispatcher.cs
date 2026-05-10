@@ -14,14 +14,31 @@ namespace SIDM.App.Services;
 /// </summary>
 public sealed class IpcDispatcher
 {
+    /// <summary>
+    /// How long to suppress duplicate captures of the same URL. Many "Download as
+    /// Excel/CSV" buttons fire the click handler twice (once for the click, once
+    /// from a download-started fallback), and Chrome's onCreated re-fires after
+    /// our cancel/erase. Two captures within this window collapse to one row.
+    /// </summary>
+    private static readonly TimeSpan DuplicateWindow = TimeSpan.FromSeconds(5);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DownloadEngine _engine;
+    private readonly DownloadCreatedNotifier _notifier;
     private readonly ILogger<IpcDispatcher> _logger;
 
-    public IpcDispatcher(IServiceScopeFactory scopeFactory, DownloadEngine engine, ILogger<IpcDispatcher> logger)
+    private readonly object _recentLock = new();
+    private readonly Dictionary<string, (long Id, DateTimeOffset At)> _recent = new();
+
+    public IpcDispatcher(
+        IServiceScopeFactory scopeFactory,
+        DownloadEngine engine,
+        DownloadCreatedNotifier notifier,
+        ILogger<IpcDispatcher> logger)
     {
         _scopeFactory = scopeFactory;
         _engine = engine;
+        _notifier = notifier;
         _logger = logger;
     }
 
@@ -46,6 +63,14 @@ public sealed class IpcDispatcher
         if (!Uri.TryCreate(req.Url, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
         {
             return new ErrorMessage("InvalidUrl", $"Not a downloadable URL: {req.Url}");
+        }
+
+        // Dedupe identical URLs that arrive within the dedup window (Chrome /
+        // website button can fire the same download twice in rapid succession).
+        if (TryGetRecent(req.Url) is { } recentId)
+        {
+            _logger.LogInformation("Suppressed duplicate IPC download for {Url} (existing id {Id})", req.Url, recentId);
+            return new DownloadResponseMessage(recentId, "DuplicateSuppressed");
         }
 
         var fileName = !string.IsNullOrWhiteSpace(req.FileName)
@@ -82,10 +107,31 @@ public sealed class IpcDispatcher
             id = await repo.AddAsync(download, cancellationToken);
         }
 
+        RecordRecent(req.Url, id);
+        _notifier.Publish(id);
+
         await _engine.StartAsync(id, cancellationToken);
         _logger.LogInformation("Enqueued IPC download {Id} for {Url}", id, req.Url);
 
         return new DownloadResponseMessage(id, DownloadStatus.Queued.ToString());
+    }
+
+    private long? TryGetRecent(string url)
+    {
+        var now = DateTimeOffset.UtcNow;
+        lock (_recentLock)
+        {
+            // Sweep expired entries while we're holding the lock.
+            var expired = _recent.Where(kv => now - kv.Value.At > DuplicateWindow).Select(kv => kv.Key).ToArray();
+            foreach (var key in expired) _recent.Remove(key);
+
+            return _recent.TryGetValue(url, out var entry) ? entry.Id : null;
+        }
+    }
+
+    private void RecordRecent(string url, long id)
+    {
+        lock (_recentLock) { _recent[url] = (id, DateTimeOffset.UtcNow); }
     }
 
     private static Dictionary<string, string>? MergeHeaders(

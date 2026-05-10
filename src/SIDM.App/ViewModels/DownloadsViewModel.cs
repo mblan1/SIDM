@@ -15,6 +15,7 @@ public partial class DownloadsViewModel : ObservableObject
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DownloadEngine _engine;
     private readonly UiProgressBus _bus;
+    private readonly DownloadCreatedNotifier _notifier;
     private readonly ILogger<DownloadsViewModel> _logger;
 
     public ObservableCollection<DownloadRowViewModel> Rows { get; } = new();
@@ -29,12 +30,51 @@ public partial class DownloadsViewModel : ObservableObject
         IServiceScopeFactory scopeFactory,
         DownloadEngine engine,
         UiProgressBus bus,
+        DownloadCreatedNotifier notifier,
         ILogger<DownloadsViewModel> logger)
     {
         _scopeFactory = scopeFactory;
         _engine = engine;
         _bus = bus;
+        _notifier = notifier;
         _logger = logger;
+        _notifier.Created += OnDownloadCreated;
+    }
+
+    private void OnDownloadCreated(long downloadId)
+    {
+        // Publishers may be on any thread — IPC dispatch runs on a threadpool worker.
+        // Marshal to the WPF dispatcher before touching the ObservableCollection.
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            _ = AddRowFromDbAsync(downloadId);
+        }
+        else
+        {
+            dispatcher.BeginInvoke(() => _ = AddRowFromDbAsync(downloadId));
+        }
+    }
+
+    private async Task AddRowFromDbAsync(long downloadId)
+    {
+        // Dedupe — UI-initiated downloads add the row themselves AND publish, so
+        // this callback can race with that path. Skip if we already have it.
+        if (Rows.Any(r => r.Id == downloadId)) return;
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IDownloadRepository>();
+        var fresh = await repo.GetAsync(downloadId);
+        if (fresh is null) return;
+
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            if (Rows.Any(r => r.Id == downloadId)) return;
+            var row = new DownloadRowViewModel(fresh, _bus);
+            Rows.Insert(0, row);
+            StatusBarText = $"Captured {row.FileName}";
+            _ = MonitorAsync(row);
+        });
     }
 
     public async Task LoadAsync()
@@ -89,6 +129,10 @@ public partial class DownloadsViewModel : ObservableObject
         var row = new DownloadRowViewModel(download, _bus);
         Rows.Insert(0, row);
         StatusBarText = $"Queued {download.FileName}";
+
+        // No-op for the in-process flow (we already added the row above; the
+        // notifier's AddRowFromDbAsync dedupe guard skips it). Kept for symmetry.
+        _notifier.Publish(id);
 
         await _engine.StartAsync(id);
         StatusBarText = $"Downloading {download.FileName}";
