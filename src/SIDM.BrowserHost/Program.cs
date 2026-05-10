@@ -1,73 +1,136 @@
-using System.Buffers.Binary;
-using System.Text.Json;
+using System.Diagnostics;
+using System.IO.Pipes;
+using SIDM.Ipc;
 
 namespace SIDM.BrowserHost;
 
+/// <summary>
+/// Native Messaging Host bridge. Chrome/Edge/Firefox spawns this exe and pipes
+/// length-prefixed JSON to/from us via stdin/stdout. We forward those frames
+/// to the running SIDM.App over a named pipe, and pipe the responses back.
+///
+/// If SIDM.App isn't running, we attempt to launch it and retry the connection
+/// with a short backoff before giving up.
+/// </summary>
 internal static class Program
 {
-    private static async Task<int> Main()
+    private static readonly TimeSpan AppLaunchTimeout = TimeSpan.FromSeconds(10);
+
+    private static async Task<int> Main(string[] args)
     {
+        // Optional: --probe just confirms the host is registered correctly without
+        // requiring browser-side stdin to be connected.
+        if (args.Length == 1 && args[0] == "--probe")
+        {
+            Console.Error.WriteLine($"SIDM.BrowserHost ready. Pipe: {PipeNameProvider.ForCurrentUser()}");
+            return 0;
+        }
+
         using var stdin = Console.OpenStandardInput();
         using var stdout = Console.OpenStandardOutput();
 
         try
         {
-            while (await ReadFramedAsync(stdin) is { } message)
-            {
-                var response = HandleMessage(message);
-                await WriteFramedAsync(stdout, response);
-            }
+            await BridgeAsync(stdin, stdout, CancellationToken.None);
+            return 0;
         }
         catch (EndOfStreamException)
         {
+            return 0; // browser closed the stream
         }
-
-        return 0;
-    }
-
-    private static JsonDocument HandleMessage(JsonDocument message)
-    {
-        var type = message.RootElement.TryGetProperty("type", out var t) ? t.GetString() : null;
-        return type switch
+        catch (Exception ex)
         {
-            "hello" => JsonDocument.Parse("""
-                {"type":"hello","appVersion":"0.1.0","capabilities":["download"]}
-                """),
-            _ => JsonDocument.Parse("""
-                {"type":"error","message":"unknown message type"}
-                """),
-        };
-    }
-
-    private static async Task<JsonDocument?> ReadFramedAsync(Stream stream)
-    {
-        var lengthBytes = new byte[4];
-        var read = await stream.ReadAsync(lengthBytes.AsMemory(0, 4));
-        if (read == 0) return null;
-        if (read < 4) throw new EndOfStreamException();
-
-        var length = BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
-        if (length <= 0 || length > 1024 * 1024) throw new InvalidDataException("frame size out of range");
-
-        var payload = new byte[length];
-        var offset = 0;
-        while (offset < length)
-        {
-            var n = await stream.ReadAsync(payload.AsMemory(offset, length - offset));
-            if (n == 0) throw new EndOfStreamException();
-            offset += n;
+            try
+            {
+                await IpcFraming.WriteAsync(stdout, new ErrorMessage("HostError", ex.Message));
+            }
+            catch { }
+            return 1;
         }
-
-        return JsonDocument.Parse(payload);
     }
 
-    private static async Task WriteFramedAsync(Stream stream, JsonDocument doc)
+    private static async Task BridgeAsync(Stream stdin, Stream stdout, CancellationToken cancellationToken)
     {
-        var json = JsonSerializer.SerializeToUtf8Bytes(doc.RootElement);
-        var lengthBytes = new byte[4];
-        BinaryPrimitives.WriteInt32LittleEndian(lengthBytes, json.Length);
-        await stream.WriteAsync(lengthBytes);
-        await stream.WriteAsync(json);
-        await stream.FlushAsync();
+        await using var pipe = await ConnectToAppAsync(cancellationToken);
+
+        // Two pumps: stdin → pipe and pipe → stdout. Each runs until its source ends.
+        var stdinToPipe = PumpAsync(stdin, pipe, cancellationToken);
+        var pipeToStdout = PumpAsync(pipe, stdout, cancellationToken);
+
+        await Task.WhenAny(stdinToPipe, pipeToStdout);
+    }
+
+    private static async Task PumpAsync(Stream source, Stream destination, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var msg = await IpcFraming.ReadAsync(source, cancellationToken);
+                if (msg is null) return;
+                await IpcFraming.WriteAsync(destination, msg, cancellationToken);
+            }
+        }
+        catch (Exception)
+        {
+            // EOS or pipe broken — pump ends.
+        }
+    }
+
+    private static async Task<NamedPipeClientStream> ConnectToAppAsync(CancellationToken cancellationToken)
+    {
+        var name = PipeNameProvider.ForCurrentUser();
+        var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+
+        try
+        {
+            await pipe.ConnectAsync((int)TimeSpan.FromMilliseconds(500).TotalMilliseconds, cancellationToken);
+            return pipe;
+        }
+        catch (TimeoutException)
+        {
+            // App not running — try to launch it.
+            await pipe.DisposeAsync();
+            TryLaunchApp();
+
+            pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+            await pipe.ConnectAsync((int)AppLaunchTimeout.TotalMilliseconds, cancellationToken);
+            return pipe;
+        }
+    }
+
+    private static void TryLaunchApp()
+    {
+        try
+        {
+            // SIDM.App.exe lives next to SIDM.BrowserHost.exe in our installer layout.
+            var hostPath = Environment.ProcessPath ?? "";
+            var dir = Path.GetDirectoryName(hostPath);
+            if (string.IsNullOrEmpty(dir)) return;
+
+            var candidates = new[]
+            {
+                Path.Combine(dir, "SIDM.App.exe"),
+                Path.Combine(dir, "..", "SIDM.App.exe"),
+            };
+
+            foreach (var candidate in candidates)
+            {
+                if (File.Exists(candidate))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = candidate,
+                        UseShellExecute = true,
+                        WindowStyle = ProcessWindowStyle.Normal,
+                    });
+                    return;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to launch SIDM.App.exe: {ex.Message}");
+        }
     }
 }

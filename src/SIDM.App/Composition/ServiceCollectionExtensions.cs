@@ -37,6 +37,10 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<DownloadAutoResumeService>();
         services.AddHostedService<GracefulShutdownService>();
 
+        // IPC: named-pipe server for SIDM.BrowserHost (browser extension bridge).
+        services.AddSingleton<IpcDispatcher>();
+        services.AddHostedService<IpcPipeServer>();
+
         // ViewModels + Windows
         services.AddSingleton<MainWindow>();
         services.AddSingleton<MainViewModel>();

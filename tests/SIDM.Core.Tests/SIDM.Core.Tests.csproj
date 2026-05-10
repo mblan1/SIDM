@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SIDM.Core\SIDM.Core.csproj" />
+    <ProjectReference Include="..\..\src\SIDM.Ipc\SIDM.Ipc.csproj" />
   </ItemGroup>
 
   <ItemGroup>

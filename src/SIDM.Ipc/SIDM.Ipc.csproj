@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Description>Shared IPC types and helpers used by SIDM.App (pipe server) and SIDM.BrowserHost (pipe client + native messaging stdio bridge). Zero external dependencies — kept tiny so BrowserHost stays small when published self-contained.</Description>
+  </PropertyGroup>
+
+</Project>

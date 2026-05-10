@@ -16,4 +16,8 @@
     <PackageReference Include="Serilog.Sinks.File" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\SIDM.Ipc\SIDM.Ipc.csproj" />
+  </ItemGroup>
+
 </Project>
