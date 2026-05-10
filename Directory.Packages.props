@@ -27,6 +27,7 @@
 
     <!-- UI -->
     <PackageVersion Include="WPF-UI" Version="3.0.5" />
+    <PackageVersion Include="Microsoft.Win32.Registry" Version="5.0.0" />
 
     <!-- Logging -->
     <PackageVersion Include="Serilog" Version="4.2.0" />
