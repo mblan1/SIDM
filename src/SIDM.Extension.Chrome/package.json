@@ -1,0 +1,17 @@
+{
+  "name": "sidm-extension-chrome",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SIDM (Snw Internet Download Manager) browser extension for Chromium-family browsers (Chrome, Edge, Brave). Captures downloads and forwards them to the SIDM desktop app via Native Messaging.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.279",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3"
+  }
+}
