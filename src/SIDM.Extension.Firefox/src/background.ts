@@ -1,11 +1,13 @@
 /**
  * SIDM extension background script (Firefox MV3 event page).
  *
- * Three jobs:
+ * Four jobs:
  *   1. Maintain a Native Messaging port to com.sidm.host.
  *   2. Intercept browser downloads and forward them to SIDM with full context
  *      (cookies, referer, UA) so SIDM can replay the request authentically.
  *   3. Provide a "Download with SIDM" context menu for links / videos / audio.
+ *   4. Sniff HLS / DASH manifests on every tab so the popup can offer
+ *      one-click capture of in-page video players (Phase 4.D).
  */
 
 import {
@@ -15,6 +17,7 @@ import {
     type IpcMessage,
     NATIVE_HOST_ID,
 } from './ipc';
+import { installSniffer } from './sniffer';
 
 const CLIENT_NAME = 'SIDM-Firefox-Extension';
 const CLIENT_VERSION = chrome.runtime.getManifest().version;
@@ -217,7 +220,24 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
     }
 });
 
-// Open the options page when the toolbar icon is clicked.
-chrome.action.onClicked.addListener(() => {
-    chrome.runtime.openOptionsPage();
+// Streaming-manifest sniffer (Phase 4.D). Runs once when the background
+// boots; listeners registered at top level get reattached on every wake-up.
+installSniffer();
+
+// Popup → background channel. The popup parks the assembled DownloadRequest
+// (with cookies pre-resolved) here and we forward it through the existing
+// native messaging port.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== 'sidm:capture-manifest') return false;
+    const request = message.request as DownloadRequest;
+    try {
+        ensurePort().postMessage(request);
+        sendResponse({ ok: true });
+    } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+    }
+    return true;
 });
+
+// (No chrome.action.onClicked listener — the manifest declares default_popup
+// instead. The popup has a settings button that calls openOptionsPage().)

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>SIDM</title>
+    <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+    <header>
+        <h1>SIDM</h1>
+        <button id="settings-btn" title="Open settings">⚙</button>
+    </header>
+
+    <section id="empty" hidden>
+        <p class="muted">No video streams detected on this page.</p>
+        <p class="hint">Play the video so the player loads its manifest, then reopen this popup.</p>
+    </section>
+
+    <section id="list-section">
+        <ul id="manifests"></ul>
+    </section>
+
+    <footer>
+        <span id="status" class="muted"></span>
+    </footer>
+    <script type="module" src="popup.js"></script>
+</body>
+</html>

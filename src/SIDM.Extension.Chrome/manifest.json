@@ -14,7 +14,10 @@
     "cookies",
     "nativeMessaging",
     "notifications",
-    "storage"
+    "storage",
+    "webRequest",
+    "webNavigation",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -24,6 +27,7 @@
     "open_in_tab": false
   },
   "action": {
-    "default_title": "SIDM"
+    "default_title": "SIDM",
+    "default_popup": "popup.html"
   }
 }

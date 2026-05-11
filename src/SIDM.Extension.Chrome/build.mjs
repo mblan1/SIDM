@@ -7,7 +7,7 @@ rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist', { recursive: true });
 
 const config = {
-  entryPoints: ['src/background.ts', 'src/options.ts'],
+  entryPoints: ['src/background.ts', 'src/options.ts', 'src/popup.ts'],
   bundle: true,
   outdir: 'dist',
   format: 'esm',
@@ -29,5 +29,7 @@ if (watch) {
 copyFileSync('manifest.json', 'dist/manifest.json');
 copyFileSync('src/options.html', 'dist/options.html');
 copyFileSync('src/options.css', 'dist/options.css');
+copyFileSync('src/popup.html', 'dist/popup.html');
+copyFileSync('src/popup.css', 'dist/popup.css');
 
 console.log('Build complete. Load the dist/ folder as an unpacked extension in Chrome.');
