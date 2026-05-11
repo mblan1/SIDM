@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Logging.Abstractions;
+using SIDM.Core.Bandwidth;
 using SIDM.Core.Engine;
 using SIDM.Core.Http;
 using SIDM.Core.Tests.Http;
@@ -46,6 +47,7 @@ public class SegmentWorkerTests : IDisposable
         var worker = new SegmentWorker(
             FakeHttpMessageHandler.ToFactory(DownloadHttpClient.Name, handler),
             writer,
+            new NoopBandwidthGovernor(),
             NullLogger<SegmentWorker>.Instance);
 
         var task = new SegmentTask(
@@ -81,6 +83,7 @@ public class SegmentWorkerTests : IDisposable
         var worker = new SegmentWorker(
             FakeHttpMessageHandler.ToFactory(DownloadHttpClient.Name, handler),
             writer,
+            new NoopBandwidthGovernor(),
             NullLogger<SegmentWorker>.Instance);
 
         var result = await worker.RunAsync(new SegmentTask(
@@ -99,6 +102,7 @@ public class SegmentWorkerTests : IDisposable
         var worker = new SegmentWorker(
             FakeHttpMessageHandler.ToFactory(DownloadHttpClient.Name, handler),
             writer,
+            new NoopBandwidthGovernor(),
             NullLogger<SegmentWorker>.Instance);
 
         var result = await worker.RunAsync(new SegmentTask(
@@ -132,6 +136,7 @@ public class SegmentWorkerTests : IDisposable
         var worker = new SegmentWorker(
             FakeHttpMessageHandler.ToFactory(DownloadHttpClient.Name, handler),
             writer,
+            new NoopBandwidthGovernor(),
             NullLogger<SegmentWorker>.Instance);
 
         var task = new SegmentTask(
@@ -157,6 +162,7 @@ public class SegmentWorkerTests : IDisposable
         var worker = new SegmentWorker(
             FakeHttpMessageHandler.ToFactory(DownloadHttpClient.Name, handler),
             writer,
+            new NoopBandwidthGovernor(),
             NullLogger<SegmentWorker>.Instance);
 
         var task = new SegmentTask(
@@ -182,6 +188,7 @@ public class SegmentWorkerTests : IDisposable
         var worker = new SegmentWorker(
             FakeHttpMessageHandler.ToFactory(DownloadHttpClient.Name, handler),
             writer,
+            new NoopBandwidthGovernor(),
             NullLogger<SegmentWorker>.Instance);
 
         var sink = new RecordingProgressSink();
@@ -217,6 +224,7 @@ public class SegmentWorkerTests : IDisposable
         var worker = new SegmentWorker(
             FakeHttpMessageHandler.ToFactory(DownloadHttpClient.Name, handler),
             writer,
+            new NoopBandwidthGovernor(),
             NullLogger<SegmentWorker>.Instance);
 
         var result = await worker.RunAsync(

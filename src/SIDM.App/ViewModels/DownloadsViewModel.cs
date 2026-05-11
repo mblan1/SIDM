@@ -20,6 +20,7 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DownloadEngine _engine;
+    private readonly DownloadQueue _queue;
     private readonly UiProgressBus _bus;
     private readonly DownloadCreatedNotifier _notifier;
     private readonly ILogger<DownloadsViewModel> _logger;
@@ -35,16 +36,37 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
     public DownloadsViewModel(
         IServiceScopeFactory scopeFactory,
         DownloadEngine engine,
+        DownloadQueue queue,
         UiProgressBus bus,
         DownloadCreatedNotifier notifier,
         ILogger<DownloadsViewModel> logger)
     {
         _scopeFactory = scopeFactory;
         _engine = engine;
+        _queue = queue;
         _bus = bus;
         _notifier = notifier;
         _logger = logger;
         _notifier.Created += OnDownloadCreated;
+        _engine.Finished += OnEngineFinished;
+    }
+
+    private void OnEngineFinished(long downloadId, DownloadStatus status)
+    {
+        // Engine reports terminal state on a threadpool worker. Marshal to the
+        // dispatcher and refresh the matching row so the UI sees the final
+        // status without waiting for the next MonitorAsync tick.
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null) return;
+        dispatcher.BeginInvoke(async () =>
+        {
+            var row = Rows.FirstOrDefault(r => r.Id == downloadId);
+            if (row is null) return;
+            await RefreshRowAsync(row);
+            if (status == DownloadStatus.Completed) StatusBarText = $"Completed {row.FileName}";
+            else if (status == DownloadStatus.Failed) StatusBarText = $"Failed: {row.FileName}";
+            else if (status == DownloadStatus.Paused) StatusBarText = $"Paused {row.FileName}";
+        });
     }
 
     private void OnDownloadCreated(long downloadId)
@@ -96,7 +118,16 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
         foreach (var d in all)
         {
             var withSegs = await repo.GetAsync(d.Id) ?? d;
-            Rows.Add(new DownloadRowViewModel(withSegs, _bus));
+            var row = new DownloadRowViewModel(withSegs, _bus);
+            Rows.Add(row);
+
+            // Persisted Queued/Downloading rows are still in flight (the queue
+            // and auto-resume service take care of restarting them) — keep the
+            // status display fresh.
+            if (row.Status == DownloadStatus.Queued || row.Status == DownloadStatus.Downloading)
+            {
+                _ = MonitorAsync(row);
+            }
         }
 
         StatusBarText = $"{Rows.Count} download{(Rows.Count == 1 ? "" : "s")}";
@@ -129,6 +160,17 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
     private async Task AddAsync()
     {
         await ShowDialogAndStartAsync(seed: null);
+    }
+
+    [RelayCommand]
+    private void OpenSettings()
+    {
+        // The dialog is transient — DI builds a fresh instance with the live
+        // DownloadQueue / BandwidthSettingsService so the user sees current
+        // values, not whatever was set when the app started.
+        var dlg = _scopeFactory.CreateScope().ServiceProvider.GetRequiredService<Views.SettingsDialog>();
+        dlg.Owner = Application.Current?.MainWindow;
+        dlg.ShowDialog();
     }
 
     /// <summary>
@@ -218,8 +260,12 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
         // Kept for symmetry with the legacy direct-IPC path.
         _notifier.Publish(id);
 
-        await _engine.StartAsync(id);
-        StatusBarText = $"Downloading {download.FileName}";
+        // The queue decides whether to start immediately (slot available) or
+        // park the id until an active download finishes.
+        await _queue.EnqueueAsync(id);
+        StatusBarText = _queue.RunningCount > _queue.MaxConcurrent
+            ? $"Queued {download.FileName} (waiting for slot)"
+            : $"Downloading {download.FileName}";
 
         _ = MonitorAsync(row);
 
@@ -243,19 +289,36 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
     private async Task PauseAsync(DownloadRowViewModel? row)
     {
         if (row is null) return;
-        if (_engine.Pause(row.Id))
-        {
-            StatusBarText = $"Paused {row.FileName}";
-            await RefreshRowAsync(row);
-        }
+        await _queue.PauseAsync(row.Id);
+        StatusBarText = $"Paused {row.FileName}";
+        await RefreshRowAsync(row);
     }
 
     [RelayCommand]
     private async Task ResumeAsync(DownloadRowViewModel? row)
     {
         if (row is null) return;
-        await _engine.StartAsync(row.Id);
-        StatusBarText = $"Resuming {row.FileName}";
+
+        // Flip DB status to Queued so MonitorAsync's loop predicate keeps
+        // running even if the queue parks us behind active downloads. The
+        // engine will move us to Downloading when our slot opens.
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<IDownloadRepository>();
+            var fresh = await repo.GetAsync(row.Id);
+            if (fresh is not null && fresh.Status != DownloadStatus.Downloading)
+            {
+                fresh.Status = DownloadStatus.Queued;
+                fresh.ErrorMessage = null;
+                await repo.UpdateAsync(fresh);
+                row.RefreshFrom(fresh);
+            }
+        }
+
+        await _queue.EnqueueAsync(row.Id);
+        StatusBarText = _queue.RunningCount >= _queue.MaxConcurrent
+            ? $"Queued {row.FileName} (waiting for slot)"
+            : $"Resuming {row.FileName}";
         _ = MonitorAsync(row);
     }
 
@@ -263,7 +326,7 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
     private async Task RemoveAsync(DownloadRowViewModel? row)
     {
         if (row is null) return;
-        _engine.Pause(row.Id);
+        _queue.Remove(row.Id);
         await using var scope = _scopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<IDownloadRepository>();
         await repo.RemoveAsync(row.Id);
@@ -282,17 +345,19 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 
     private async Task MonitorAsync(DownloadRowViewModel row)
     {
-        // Poll every second while the download is active. Replace with bus events later.
-        while (_engine.IsActive(row.Id))
+        // Poll every second while the row is either queued (waiting for a slot)
+        // or actively downloading. The engine.Finished event handles terminal
+        // status; this loop just keeps the row VM in sync with the database
+        // while progress is in flight. Replace with bus events later.
+        while (row.Status == DownloadStatus.Queued
+               || row.Status == DownloadStatus.Probing
+               || row.Status == DownloadStatus.Downloading
+               || _engine.IsActive(row.Id))
         {
             await Task.Delay(1000);
             await RefreshRowAsync(row);
         }
         await RefreshRowAsync(row);
-        if (row.Status == DownloadStatus.Completed)
-        {
-            StatusBarText = $"Completed {row.FileName}";
-        }
     }
 
     private async Task<string?> TryGetRememberedFolderAsync(string extension)

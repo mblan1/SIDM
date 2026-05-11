@@ -1,0 +1,67 @@
+<ui:FluentWindow x:Class="SIDM.App.Views.SettingsDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:vm="clr-namespace:SIDM.App.ViewModels"
+                 mc:Ignorable="d"
+                 Title="Settings"
+                 Height="380"
+                 Width="540"
+                 ResizeMode="NoResize"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 WindowStartupLocation="CenterOwner"
+                 ShowInTaskbar="False"
+                 d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}">
+    <Grid Margin="24,48,24,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Grid.RowSpan="3" VerticalAlignment="Top" Title="Settings" />
+
+        <StackPanel Grid.Row="1" Margin="0,8,0,0">
+            <TextBlock Text="Maximum concurrent downloads" FontWeight="SemiBold" />
+            <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
+                       Text="More downloads finish in parallel; the rest wait in the queue." />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Slider Grid.Column="0" Minimum="1" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True"
+                        Value="{Binding MaxConcurrent, Mode=TwoWay}" />
+                <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
+                           Text="{Binding MaxConcurrent}" FontWeight="SemiBold" />
+            </Grid>
+
+            <TextBlock Margin="0,24,0,0" Text="Global download speed limit" FontWeight="SemiBold" />
+            <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
+                       Text="0 = unlimited. The cap is shared across all in-flight downloads and segments." />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ui:TextBox Grid.Column="0" Text="{Binding BandwidthKiBPerSec, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                            PlaceholderText="0" />
+                <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Text="KiB/s" Opacity="0.7" />
+            </Grid>
+            <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.7"
+                       Text="{Binding BandwidthDisplay}" />
+
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF6B6B" Margin="0,12,0,0"
+                       Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" />
+            <ui:Button Content="Save" Appearance="Primary" Click="OnAccept" IsDefault="True" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

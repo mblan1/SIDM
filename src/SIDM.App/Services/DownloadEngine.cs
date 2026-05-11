@@ -21,6 +21,14 @@ public sealed class DownloadEngine
 
     private readonly ConcurrentDictionary<long, CancellationTokenSource> _active = new();
 
+    /// <summary>
+    /// Fires after a download run terminates — successfully (Completed),
+    /// canceled (Paused), or with an error (Failed). The <see cref="DownloadQueue"/>
+    /// subscribes to release a concurrency slot and dispatch the next pending
+    /// download. Handlers run on a threadpool worker, never on the UI thread.
+    /// </summary>
+    public event Action<long, DownloadStatus>? Finished;
+
     public DownloadEngine(
         DownloadOrchestrator orchestrator,
         IServiceScopeFactory scopeFactory,
@@ -118,11 +126,19 @@ public sealed class DownloadEngine
             _logger.LogError(ex, "Download {Id} crashed", downloadId);
             await UpdateStatusAsync(repo, download, DownloadStatus.Failed, ex.Message);
             CleanupActive(downloadId, cts);
+            RaiseFinished(downloadId, DownloadStatus.Failed);
             return;
         }
 
         await PersistResultAsync(repo, download, result);
         CleanupActive(downloadId, cts);
+        RaiseFinished(downloadId, download.Status);
+    }
+
+    private void RaiseFinished(long downloadId, DownloadStatus status)
+    {
+        try { Finished?.Invoke(downloadId, status); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Finished handler threw for {Id}", downloadId); }
     }
 
     private async Task PersistResultAsync(IDownloadRepository repo, Download download, DownloadResult result)

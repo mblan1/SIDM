@@ -45,6 +45,10 @@
                        Content="Remove"
                        Command="{Binding Downloads.RemoveCommand}"
                        CommandParameter="{Binding Downloads.SelectedRow}" />
+            <ui:Button Margin="8,0,0,0"
+                       Icon="{ui:SymbolIcon Symbol=Settings24}"
+                       Content="Settings"
+                       Command="{Binding Downloads.OpenSettingsCommand}" />
         </StackPanel>
 
         <!-- Download list -->

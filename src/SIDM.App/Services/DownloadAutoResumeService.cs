@@ -17,33 +17,42 @@ namespace SIDM.App.Services;
 public sealed class DownloadAutoResumeService : IHostedService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly DownloadEngine _engine;
+    private readonly DownloadQueue _queue;
+    private readonly BandwidthSettingsService _bandwidth;
     private readonly ILogger<DownloadAutoResumeService> _logger;
 
     public DownloadAutoResumeService(
         IServiceScopeFactory scopeFactory,
-        DownloadEngine engine,
+        DownloadQueue queue,
+        BandwidthSettingsService bandwidth,
         ILogger<DownloadAutoResumeService> logger)
     {
         _scopeFactory = scopeFactory;
-        _engine = engine;
+        _queue = queue;
+        _bandwidth = bandwidth;
         _logger = logger;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // Apply persisted user settings BEFORE we (re)enqueue anything — the
+        // queue cap and bandwidth cap need to be live when downloads start.
+        await _queue.LoadAsync(cancellationToken);
+        await _bandwidth.LoadAsync(cancellationToken);
+
         long[] orphanIds;
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var repo = scope.ServiceProvider.GetRequiredService<IDownloadRepository>();
             var orphans = (await repo.GetByStatusAsync(DownloadStatus.Downloading, cancellationToken))
                 .Concat(await repo.GetByStatusAsync(DownloadStatus.Probing, cancellationToken))
+                .Concat(await repo.GetByStatusAsync(DownloadStatus.Queued, cancellationToken))
                 .ToList();
 
             orphanIds = orphans.Select(o => o.Id).ToArray();
 
             // Reset to Queued so the UI shows the correct transient state and the
-            // engine can move them through Downloading itself.
+            // queue/engine can move them through Downloading itself.
             foreach (var d in orphans)
             {
                 d.Status = DownloadStatus.Queued;
@@ -56,7 +65,7 @@ public sealed class DownloadAutoResumeService : IHostedService
         _logger.LogInformation("Auto-resuming {Count} orphaned download(s) from previous session", orphanIds.Length);
         foreach (var id in orphanIds)
         {
-            await _engine.StartAsync(id, cancellationToken);
+            await _queue.EnqueueAsync(id, cancellationToken);
         }
     }
 

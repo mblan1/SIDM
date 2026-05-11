@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SIDM.Core.Abstractions;
+using SIDM.Core.Bandwidth;
 using SIDM.Core.Engine;
 using SIDM.Core.Http;
 using SIDM.Core.Tests.Http;
@@ -236,6 +237,7 @@ public class DownloadOrchestratorTests : IDisposable
             probeMock.Object,
             FakeHttpMessageHandler.ToFactory(DownloadHttpClient.Name, handler),
             new SparseFileWriterFactory(NullLogger<SparseFileWriter>.Instance),
+            new NoopBandwidthGovernor(),
             NullLoggerFactory.Instance);
 
         var result = await orchestrator.ExecuteAsync(new DownloadRequest
@@ -254,7 +256,7 @@ public class DownloadOrchestratorTests : IDisposable
         var factory = FakeHttpMessageHandler.ToFactory(DownloadHttpClient.Name, handler);
         var probe = new RangeProbe(factory, NullLogger<RangeProbe>.Instance);
         var writerFactory = new SparseFileWriterFactory(NullLogger<SparseFileWriter>.Instance);
-        return new DownloadOrchestrator(probe, factory, writerFactory, NullLoggerFactory.Instance);
+        return new DownloadOrchestrator(probe, factory, writerFactory, new NoopBandwidthGovernor(), NullLoggerFactory.Instance);
     }
 
     private static FakeHttpMessageHandler MakeRangeHonoringHandler(byte[] data) =>

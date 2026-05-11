@@ -32,6 +32,7 @@ public sealed class DownloadOrchestrator
     private readonly IRangeProbe _rangeProbe;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IDownloadFileWriterFactory _writerFactory;
+    private readonly IBandwidthGovernor _governor;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<DownloadOrchestrator> _logger;
 
@@ -39,11 +40,13 @@ public sealed class DownloadOrchestrator
         IRangeProbe rangeProbe,
         IHttpClientFactory httpClientFactory,
         IDownloadFileWriterFactory writerFactory,
+        IBandwidthGovernor governor,
         ILoggerFactory loggerFactory)
     {
         _rangeProbe = rangeProbe;
         _httpClientFactory = httpClientFactory;
         _writerFactory = writerFactory;
+        _governor = governor;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<DownloadOrchestrator>();
     }
@@ -220,7 +223,7 @@ public sealed class DownloadOrchestrator
         CancellationToken cancellationToken)
     {
         var workerLogger = _loggerFactory.CreateLogger<SegmentWorker>();
-        var worker = new SegmentWorker(_httpClientFactory, writer, workerLogger);
+        var worker = new SegmentWorker(_httpClientFactory, writer, _governor, workerLogger);
         var workerTasks = tasks.Select(t => worker.RunAsync(t, progressSink, cancellationToken)).ToArray();
 
         SegmentResult[] results;

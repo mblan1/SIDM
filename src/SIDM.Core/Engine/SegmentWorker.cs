@@ -25,15 +25,18 @@ public sealed class SegmentWorker
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IDownloadFileWriter _writer;
+    private readonly IBandwidthGovernor _governor;
     private readonly ILogger<SegmentWorker> _logger;
 
     public SegmentWorker(
         IHttpClientFactory httpClientFactory,
         IDownloadFileWriter writer,
+        IBandwidthGovernor governor,
         ILogger<SegmentWorker> logger)
     {
         _httpClientFactory = httpClientFactory;
         _writer = writer;
+        _governor = governor;
         _logger = logger;
     }
 
@@ -178,6 +181,11 @@ public sealed class SegmentWorker
 
                 var read = await stream.ReadAsync(rented.AsMemory(), cancellationToken);
                 if (read == 0) break;
+
+                // Throttle the aggregate write rate by asking the governor for
+                // permission BEFORE we commit the bytes to disk. No-op when the
+                // user has not configured a bandwidth cap.
+                await _governor.ConsumeAsync(read, cancellationToken);
 
                 await _writer.WriteAtAsync(writeOffset, rented.AsMemory(0, read), cancellationToken);
 

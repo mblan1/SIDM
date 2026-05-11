@@ -22,6 +22,8 @@ public static class ServiceCollectionExtensions
         // App-level services
         services.AddSingleton<UiProgressBus>();
         services.AddSingleton<DownloadEngine>();
+        services.AddSingleton<DownloadQueue>();
+        services.AddSingleton<BandwidthSettingsService>();
 
         // Compose the progress sink so progress goes to BOTH the SQLite writer
         // and the in-memory UI bus. Replace the singleton IDownloadProgressSink
@@ -46,6 +48,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MainWindow>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<DownloadsViewModel>();
+        services.AddTransient<Views.SettingsDialog>();
         // DownloadsViewModel owns the dispatcher and the rows collection, so it
         // implements IDownloadIntake too (the IPC dispatcher consults it to
         // surface the IDM-style popup for browser-initiated downloads).
