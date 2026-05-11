@@ -22,18 +22,31 @@ Folder receiving Setup.exe + RELEASES. Defaults to <repo>/releases.
 
 .PARAMETER NoSign
 Skip Authenticode signing. Useful for local "does this even pack" testing.
-Real public releases must sign — see scripts/sign.ps1 (Phase 5.B).
+Real public releases must sign.
+
+.PARAMETER CertificateThumbprint
+SHA-1 thumbprint of the Authenticode signing certificate installed in the
+current user's certificate store (Cert:\CurrentUser\My). Vpk reads the cert
+from there and signs every shipped exe + dll in the package, then signs the
+generated Setup.exe.
+
+.PARAMETER TimestampUrl
+RFC 3161 timestamp server. Defaults to DigiCert's free one. Without a
+timestamp the signature expires when the cert does.
 
 .EXAMPLE
-pwsh scripts/publish.ps1                 # uses AppInfo.Version
-pwsh scripts/publish.ps1 -Version 0.2.0  # explicit
+pwsh scripts/publish.ps1                 # uses AppInfo.Version, unsigned
+pwsh scripts/publish.ps1 -Version 0.2.0  # explicit version, unsigned
+pwsh scripts/publish.ps1 -CertificateThumbprint ABCD1234... # signed release
 #>
 
 [CmdletBinding()]
 param(
     [string]$Version,
     [string]$OutputDir,
-    [switch]$NoSign
+    [switch]$NoSign,
+    [string]$CertificateThumbprint,
+    [string]$TimestampUrl = 'http://timestamp.digicert.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -107,9 +120,21 @@ $packArgs = @(
     '--packAuthors', 'snw.dev',
     '--outputDir', $OutputDir
 )
-if ($NoSign) {
+
+# Authenticode signing. vpk drives signtool internally — we just pass the
+# parameters. Without a thumbprint we leave the package unsigned (and warn).
+$shouldSign = -not $NoSign -and -not [string]::IsNullOrWhiteSpace($CertificateThumbprint)
+if ($shouldSign) {
+    Write-Host "   signing with cert thumbprint $CertificateThumbprint" -ForegroundColor Cyan
+    # /sha1 selects the cert by thumbprint from the current user's store.
+    # /fd SHA256 forces a SHA-256 file digest (Win8+ requirement).
+    # /tr + /td add an RFC 3161 timestamp so the signature outlives the cert.
+    $signParams = "/sha1 $CertificateThumbprint /fd SHA256 /tr $TimestampUrl /td SHA256"
+    $packArgs += @('--signParams', $signParams)
+} else {
     Write-Host '   (unsigned build — do not distribute)' -ForegroundColor Yellow
 }
+
 & $vpk @packArgs
 if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
 
