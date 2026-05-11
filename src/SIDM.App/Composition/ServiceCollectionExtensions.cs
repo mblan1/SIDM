@@ -24,6 +24,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DownloadEngine>();
         services.AddSingleton<DownloadQueue>();
         services.AddSingleton<BandwidthSettingsService>();
+        services.AddSingleton<SchedulerService>();
+        services.AddHostedService(sp => sp.GetRequiredService<SchedulerService>());
 
         // Compose the progress sink so progress goes to BOTH the SQLite writer
         // and the in-memory UI bus. Replace the singleton IDownloadProgressSink

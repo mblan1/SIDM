@@ -30,6 +30,7 @@ public static class DataServiceCollectionExtensions
 
         services.AddScoped<IDownloadRepository, DownloadRepository>();
         services.AddScoped<ISettingsRepository, SettingsRepository>();
+        services.AddScoped<IScheduleRuleRepository, ScheduleRuleRepository>();
 
         // Schema initializer runs FIRST (registration order = startup order). It
         // creates the DB file, applies migrations, and sets WAL pragma so the

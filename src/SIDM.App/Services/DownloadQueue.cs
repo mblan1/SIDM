@@ -36,6 +36,7 @@ public sealed class DownloadQueue
     private readonly HashSet<long> _running = new();
     private readonly List<long> _pending = new();
     private int _maxConcurrent = DefaultMaxConcurrent;
+    private bool _suspended;
 
     public DownloadQueue(
         DownloadEngine engine,
@@ -77,6 +78,27 @@ public sealed class DownloadQueue
     public int PendingCount { get { lock (_lock) { return _pending.Count; } } }
 
     /// <summary>
+    /// When true, the queue accepts <see cref="EnqueueAsync"/> calls but
+    /// dispatches nothing — newly added ids accumulate in the pending list.
+    /// Used by <see cref="SchedulerService"/> to enforce blocked time windows
+    /// without zeroing the user's <see cref="MaxConcurrent"/> setting.
+    /// </summary>
+    public bool Suspended
+    {
+        get { lock (_lock) { return _suspended; } }
+        set
+        {
+            List<long> toStart;
+            lock (_lock)
+            {
+                _suspended = value;
+                toStart = value ? new List<long>() : TakeStartableLocked();
+            }
+            foreach (var id in toStart) _ = StartAsync(id);
+        }
+    }
+
+    /// <summary>
     /// Loads the configured max-concurrent from settings and re-queues any
     /// downloads persisted as <see cref="DownloadStatus.Queued"/>. Call once
     /// at app startup BEFORE <see cref="DownloadAutoResumeService"/> runs.
@@ -108,7 +130,7 @@ public sealed class DownloadQueue
                 return Task.CompletedTask;
             }
 
-            if (_running.Count < _maxConcurrent)
+            if (!_suspended && _running.Count < _maxConcurrent)
             {
                 _running.Add(downloadId);
                 _pending.Remove(downloadId);
@@ -209,6 +231,7 @@ public sealed class DownloadQueue
         // there is UI to set it, replace the head pop with a min-heap pop on
         // (Priority desc, CreatedUtc asc).
         var result = new List<long>();
+        if (_suspended) return result;
         while (_running.Count < _maxConcurrent && _pending.Count > 0)
         {
             var id = _pending[0];

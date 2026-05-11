@@ -7,8 +7,8 @@
                  xmlns:vm="clr-namespace:SIDM.App.ViewModels"
                  mc:Ignorable="d"
                  Title="Settings"
-                 Height="380"
-                 Width="540"
+                 Height="680"
+                 Width="640"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
@@ -25,39 +25,76 @@
 
         <ui:TitleBar Grid.Row="0" Grid.RowSpan="3" VerticalAlignment="Top" Title="Settings" />
 
-        <StackPanel Grid.Row="1" Margin="0,8,0,0">
-            <TextBlock Text="Maximum concurrent downloads" FontWeight="SemiBold" />
-            <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
-                       Text="More downloads finish in parallel; the rest wait in the queue." />
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Slider Grid.Column="0" Minimum="1" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True"
-                        Value="{Binding MaxConcurrent, Mode=TwoWay}" />
-                <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
-                           Text="{Binding MaxConcurrent}" FontWeight="SemiBold" />
-            </Grid>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+            <StackPanel>
+                <TextBlock Text="Maximum concurrent downloads" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
+                           Text="More downloads finish in parallel; the rest wait in the queue." />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Slider Grid.Column="0" Minimum="1" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True"
+                            Value="{Binding MaxConcurrent, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
+                               Text="{Binding MaxConcurrent}" FontWeight="SemiBold" />
+                </Grid>
 
-            <TextBlock Margin="0,24,0,0" Text="Global download speed limit" FontWeight="SemiBold" />
-            <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
-                       Text="0 = unlimited. The cap is shared across all in-flight downloads and segments." />
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <ui:TextBox Grid.Column="0" Text="{Binding BandwidthKiBPerSec, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
-                            PlaceholderText="0" />
-                <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Text="KiB/s" Opacity="0.7" />
-            </Grid>
-            <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.7"
-                       Text="{Binding BandwidthDisplay}" />
+                <TextBlock Margin="0,20,0,0" Text="Global download speed limit" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
+                           Text="0 = unlimited. The cap is shared across all in-flight downloads and segments." />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox Grid.Column="0" Text="{Binding BandwidthKiBPerSec, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                                PlaceholderText="0" />
+                    <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Text="KiB/s" Opacity="0.7" />
+                </Grid>
+                <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.7"
+                           Text="{Binding BandwidthDisplay}" />
 
-            <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF6B6B" Margin="0,12,0,0"
-                       Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
-        </StackPanel>
+                <TextBlock Margin="0,24,0,0" Text="Schedule rules" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
+                           Text="Allow downloads only during these windows. With no rules, downloads run any time." />
+
+                <Border Background="#15FFFFFF" CornerRadius="6" Padding="4" Margin="0,4,0,0">
+                    <DataGrid ItemsSource="{Binding Rules}"
+                              SelectedItem="{Binding SelectedRule, Mode=TwoWay}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="True"
+                              GridLinesVisibility="None"
+                              HeadersVisibility="Column"
+                              SelectionMode="Single"
+                              Background="Transparent"
+                              RowBackground="Transparent"
+                              AlternatingRowBackground="#11FFFFFF"
+                              BorderThickness="0"
+                              Height="160">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                            <DataGridTextColumn Header="Window" Binding="{Binding Window}" Width="120" />
+                            <DataGridTextColumn Header="Days" Binding="{Binding Days}" Width="120" />
+                            <DataGridTextColumn Header="Overrides" Binding="{Binding Caps}" Width="140" />
+                            <DataGridCheckBoxColumn Header="On" Binding="{Binding Enabled}" Width="40" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=Add24}" Content="Add" Click="OnAddRule" />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=Edit24}" Margin="8,0,0,0" Content="Edit" Click="OnEditRule" />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=Delete24}" Margin="8,0,0,0" Content="Remove" Click="OnDeleteRule" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF6B6B" Margin="0,12,0,0"
+                           Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+            </StackPanel>
+        </ScrollViewer>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" />
