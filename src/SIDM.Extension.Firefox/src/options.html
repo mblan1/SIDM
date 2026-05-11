@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>SIDM Settings</title>
+    <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+    <main>
+        <h1>SIDM</h1>
+        <p class="tagline">Snw Internet Download Manager</p>
+
+        <section class="status-card">
+            <h2>Connection</h2>
+            <div class="status-line">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text">Checking…</span>
+            </div>
+            <p id="status-detail" class="muted"></p>
+            <button id="recheck-btn">Test connection</button>
+        </section>
+
+        <section>
+            <h2>Capture</h2>
+            <label class="checkbox">
+                <input type="checkbox" id="capture-enabled" />
+                <span>Hand all browser downloads to SIDM</span>
+            </label>
+            <label class="field">
+                <span>Skip captures smaller than</span>
+                <input type="number" id="min-size" min="0" step="1024" />
+                <span>bytes (0 = capture everything)</span>
+            </label>
+            <label class="field">
+                <span>Bypass these hosts (one per line)</span>
+                <textarea id="bypass-hosts" rows="4" placeholder="example.com&#10;files.internal.corp"></textarea>
+            </label>
+        </section>
+
+        <section>
+            <button id="save-btn" class="primary">Save</button>
+            <span id="save-feedback" class="muted"></span>
+        </section>
+
+        <footer>
+            <span class="muted" id="version"></span>
+        </footer>
+    </main>
+    <script type="module" src="options.js"></script>
+</body>
+</html>

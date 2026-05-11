@@ -50,6 +50,9 @@ project.fragment.lock.json
 *.cache
 *.tlog
 
+## Claude Code session state (per-machine)
+.claude/
+
 ## OS
 Thumbs.db
 ehthumbs.db

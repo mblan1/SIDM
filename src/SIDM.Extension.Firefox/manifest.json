@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "SIDM (Snw Internet Download Manager)",
+  "short_name": "SIDM",
+  "version": "0.1.0",
+  "description": "Capture downloads and hand them to the SIDM desktop app for fast multi-segment downloading.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "sidm@snw.dev",
+      "strict_min_version": "109.0"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "permissions": [
+    "downloads",
+    "contextMenus",
+    "cookies",
+    "nativeMessaging",
+    "notifications",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
+  "action": {
+    "default_title": "SIDM"
+  }
+}
