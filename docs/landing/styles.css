@@ -1,0 +1,229 @@
+:root {
+    --bg: #0b0d10;
+    --bg-soft: #14181d;
+    --fg: #e8eaed;
+    --fg-muted: #9aa4ad;
+    --accent: #0078D4;
+    --accent-soft: #1e90ff;
+    --border: rgba(255, 255, 255, 0.08);
+    color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+}
+
+.container {
+    max-width: 1024px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+a {
+    color: var(--accent-soft);
+    text-decoration: none;
+}
+
+a:hover { text-decoration: underline; }
+
+code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+pre {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    overflow-x: auto;
+}
+
+pre code {
+    background: transparent;
+    padding: 0;
+}
+
+p code {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+/* ---- Hero ---- */
+.hero {
+    padding: 32px 0 80px;
+    background:
+        radial-gradient(circle at 80% 0%, rgba(0, 120, 212, 0.18), transparent 40%),
+        radial-gradient(circle at 20% 100%, rgba(0, 180, 220, 0.08), transparent 50%),
+        var(--bg);
+    border-bottom: 1px solid var(--border);
+}
+
+.logo-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 80px;
+}
+
+.logo {
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.5px;
+}
+
+.logo-row nav a {
+    margin-left: 24px;
+    color: var(--fg-muted);
+    font-size: 14px;
+}
+
+.logo-row nav a:hover { color: var(--fg); text-decoration: none; }
+
+.hero h1 {
+    font-size: 56px;
+    line-height: 1.1;
+    font-weight: 700;
+    margin: 0 0 16px;
+    letter-spacing: -1px;
+}
+
+.tagline {
+    font-size: 20px;
+    color: var(--fg-muted);
+    max-width: 640px;
+    margin: 0 0 32px;
+}
+
+.cta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+}
+
+.btn {
+    display: inline-block;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: transform 0.08s ease, background 0.15s ease;
+}
+
+.btn:hover { text-decoration: none; transform: translateY(-1px); }
+
+.btn.primary {
+    background: var(--accent);
+    color: white;
+}
+
+.btn.primary:hover { background: #0086e8; }
+
+.btn.ghost {
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--border);
+}
+
+.btn.ghost:hover { background: rgba(255, 255, 255, 0.04); }
+
+.meta {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--fg-muted);
+}
+
+/* ---- Features ---- */
+.features {
+    padding: 80px 0;
+}
+
+.features h2,
+.install h2 {
+    font-size: 32px;
+    margin: 0 0 32px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.grid article {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+}
+
+.grid h3 {
+    margin: 0 0 12px;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--fg);
+}
+
+.grid p {
+    margin: 0;
+    color: var(--fg-muted);
+    font-size: 14.5px;
+}
+
+/* ---- Install ---- */
+.install {
+    padding: 60px 0 80px;
+    border-top: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.install-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+}
+
+.install-options h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.install-options p {
+    margin: 8px 0 0;
+    color: var(--fg-muted);
+    font-size: 13px;
+}
+
+.install-options pre {
+    margin: 0;
+}
+
+/* ---- Footer ---- */
+footer {
+    padding: 24px 0 32px;
+    border-top: 1px solid var(--border);
+    color: var(--fg-muted);
+    font-size: 13px;
+}
+
+footer a { color: var(--fg-muted); }
+footer a:hover { color: var(--fg); }
+
+@media (max-width: 640px) {
+    .hero h1 { font-size: 40px; }
+    .tagline { font-size: 17px; }
+    .logo-row { margin-bottom: 48px; }
+    .features, .install { padding: 48px 0; }
+}

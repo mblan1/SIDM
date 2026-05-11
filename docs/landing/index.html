@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIDM — Snw Internet Download Manager</title>
+    <meta name="description" content="Fast multi-segment download manager for Windows. Browser capture, HLS / DASH video grabbing, queue + schedule + bandwidth governor." />
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <header class="hero">
+        <div class="container">
+            <div class="logo-row">
+                <span class="logo">SIDM</span>
+                <nav>
+                    <a href="#features">Features</a>
+                    <a href="#install">Install</a>
+                    <a href="https://github.com/snw-dev/SIDM">GitHub</a>
+                </nav>
+            </div>
+            <h1>Snw Internet Download Manager</h1>
+            <p class="tagline">
+                Fast multi-segment downloads, browser capture, native HLS &amp; DASH
+                video grabbing, queue + schedule + bandwidth governor — for modern Windows.
+            </p>
+            <div class="cta">
+                <a class="btn primary" href="https://github.com/snw-dev/SIDM/releases/latest">Download for Windows</a>
+                <a class="btn ghost" href="https://github.com/snw-dev/SIDM">View source</a>
+            </div>
+            <p class="meta">Windows 10 / 11 · .NET 8 · Free · Closed source</p>
+        </div>
+    </header>
+
+    <section id="features" class="features">
+        <div class="container">
+            <h2>What you get</h2>
+            <div class="grid">
+                <article>
+                    <h3>Real multi-segment</h3>
+                    <p>1–16 parallel range requests per download, sparse-file writes, single-stream fallback when servers fib about <code>Accept-Ranges</code>. Resumes across app restarts.</p>
+                </article>
+                <article>
+                    <h3>Browser capture</h3>
+                    <p>Chrome MV3 and Firefox MV3 extensions intercept downloads with full cookies / referer / User-Agent replay, so SIDM gets the exact bytes the browser would have.</p>
+                </article>
+                <article>
+                    <h3>HLS &amp; DASH from scratch</h3>
+                    <p>Pure-C# m3u8 parser with AES-128 decrypt and pure-C# MPD parser with video + audio mux via ffmpeg. yt-dlp routing for YouTube &amp; friends.</p>
+                </article>
+                <article>
+                    <h3>Queue &amp; bandwidth</h3>
+                    <p>Cap concurrent downloads, set a global token-bucket speed limit, define time-window schedule rules with their own per-window overrides. Drop 50 URLs and walk away.</p>
+                </article>
+                <article>
+                    <h3>One-click capture popup</h3>
+                    <p>SIDM extension auto-sniffs HLS / DASH manifests on every page. The toolbar badge shows the count; the popup lets you grab any of them with one click.</p>
+                </article>
+                <article>
+                    <h3>Auto-updates</h3>
+                    <p>Velopack delta updates from a single configurable feed URL. Toggleable in Settings. Signed installer, opt-in crash reports with URL / cookie / filename scrubbing.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section id="install" class="install">
+        <div class="container">
+            <h2>Install</h2>
+            <div class="install-options">
+                <div>
+                    <h3>Direct download</h3>
+                    <pre><code>https://github.com/snw-dev/SIDM/releases/latest</code></pre>
+                    <p>Grab <code>SIDM-Setup.exe</code> and run it. Velopack handles the rest.</p>
+                </div>
+                <div>
+                    <h3>winget</h3>
+                    <pre><code>winget install snw.SIDM</code></pre>
+                </div>
+                <div>
+                    <h3>Chocolatey</h3>
+                    <pre><code>choco install sidm</code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>
+                © 2026 snw.dev ·
+                <a href="https://snw.dev/sidm/privacy">Privacy</a> ·
+                <a href="https://snw.dev/sidm/license">License</a> ·
+                <a href="https://github.com/snw-dev/SIDM/issues">Report a bug</a>
+            </p>
+        </div>
+    </footer>
+</body>
+</html>

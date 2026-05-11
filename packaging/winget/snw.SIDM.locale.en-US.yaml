@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+#
+# Default-locale manifest for the winget entry. Lives alongside the
+# installer.yaml; winget validate happens on both before the PR can land.
+
+PackageIdentifier: snw.SIDM
+PackageVersion: 0.1.0
+PackageLocale: en-US
+
+Publisher: snw.dev
+PublisherUrl: https://snw.dev
+PublisherSupportUrl: https://github.com/snw-dev/SIDM/issues
+PrivacyUrl: https://snw.dev/sidm/privacy
+
+Author: lanle
+PackageName: Snw Internet Download Manager
+PackageUrl: https://snw.dev/sidm
+License: Proprietary
+LicenseUrl: https://snw.dev/sidm/license
+Copyright: Copyright (c) 2026 snw.dev
+
+ShortDescription: Fast multi-segment download manager with browser capture, HLS / DASH video grabbing, queue + scheduler + bandwidth governor.
+Description: |-
+  SIDM (Snw Internet Download Manager) brings IDM's headline value to modern
+  Windows. Paste a URL or let the browser extension capture every download,
+  with full cookies / referer / UA replay. HTTP downloads run on 1–16 parallel
+  segments with adaptive range-fallback. The video grabber routes YouTube /
+  Vimeo through yt-dlp and decrypts AES-128 HLS / muxes DASH from scratch.
+  Queue cap, schedule windows, per-category save folders, and a global
+  bandwidth governor make "drop 50 URLs and walk away" the default workflow.
+
+Moniker: sidm
+Tags:
+  - download-manager
+  - hls
+  - dash
+  - youtube
+  - browser-extension
+  - velopack
+
+ReleaseNotes: |-
+  - Multi-segment HTTP engine (range probe + parallel workers + sparse writes)
+  - Browser-extension capture (Chrome MV3 + Firefox MV3 with shared TS)
+  - yt-dlp + native HLS / DASH video grabbing with ffmpeg mux
+  - Queue cap, time-window scheduler, token-bucket bandwidth governor
+  - SQLite-backed cross-restart resume, per-category save folders
+  - Velopack auto-updates from GitHub Releases
+  - Opt-in Sentry crash reporting with URL / cookie / filename scrubbing
+
+ReleaseNotesUrl: https://github.com/snw-dev/SIDM/releases/tag/v0.1.0
+
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

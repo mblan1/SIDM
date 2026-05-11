@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chocolatey package manifest for SIDM. Bump $version$ on every release and
+  re-run `choco pack packaging/chocolatey/sidm.nuspec` to produce the
+  uploadable .nupkg. Submission goes through community.chocolatey.org.
+
+  The tools/ folder contains chocolateyinstall.ps1 (downloads Setup.exe,
+  verifies sha256, and runs it silently). Keep the install script tiny —
+  Velopack handles the actual install logic.
+-->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>sidm</id>
+    <version>0.1.0</version>
+    <packageSourceUrl>https://github.com/snw-dev/SIDM/tree/main/packaging/chocolatey</packageSourceUrl>
+    <owners>snw.dev</owners>
+
+    <title>Snw Internet Download Manager (SIDM)</title>
+    <authors>lanle, snw.dev</authors>
+    <projectUrl>https://snw.dev/sidm</projectUrl>
+    <projectSourceUrl>https://github.com/snw-dev/SIDM</projectSourceUrl>
+    <iconUrl>https://snw.dev/sidm/icon.png</iconUrl>
+    <bugTrackerUrl>https://github.com/snw-dev/SIDM/issues</bugTrackerUrl>
+    <docsUrl>https://github.com/snw-dev/SIDM/blob/main/README.md</docsUrl>
+    <licenseUrl>https://snw.dev/sidm/license</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+
+    <tags>download-manager hls dash youtube browser-extension velopack</tags>
+    <summary>Fast multi-segment download manager with browser capture, HLS / DASH video grabbing, queue + scheduler + bandwidth governor.</summary>
+    <description><![CDATA[
+SIDM (Snw Internet Download Manager) brings IDM's headline value to modern Windows.
+
+**Features**
+- Multi-segment HTTP engine (range probe + parallel workers + sparse writes, single-stream fallback when servers lie about Range).
+- Browser-extension capture for Chrome MV3 + Firefox MV3 — full cookies / referer / UA replay.
+- Video grabbing — yt-dlp sidecar for YouTube + a pure-C# HLS engine (with AES-128) and DASH engine (with ffmpeg mux to MP4).
+- Queue cap, time-window scheduler, token-bucket global bandwidth governor.
+- SQLite-backed cross-restart resume, per-category default save folders.
+- Velopack auto-updates from GitHub Releases.
+- Opt-in Sentry crash reporting with URL / cookie / filename scrubbing.
+
+**Requires:** Windows 10/11. yt-dlp + ffmpeg are optional but recommended for video features.
+]]></description>
+    <releaseNotes>https://github.com/snw-dev/SIDM/releases/tag/v0.1.0</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

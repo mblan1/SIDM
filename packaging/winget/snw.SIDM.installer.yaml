@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+#
+# winget installer manifest for SIDM. Submitted as a PR to
+# https://github.com/microsoft/winget-pkgs under
+#   manifests/s/snw/SIDM/<version>/
+# This file represents the installer bytes; defaults.yaml lives next to it
+# and carries app metadata.
+#
+# Bump these on every release:
+#   PackageVersion        — matches AppInfo.Version
+#   InstallerSha256       — sha256 of the Setup.exe produced by scripts/publish.ps1
+#   ReleaseDate           — ISO 8601 date
+#   InstallerUrl          — public URL of Setup.exe (GitHub Releases CDN-redirected)
+#
+# The unchanging fields (Publisher, App ID, scope, etc.) stay put.
+
+PackageIdentifier: snw.SIDM
+PackageVersion: 0.1.0
+
+InstallerType: nullsoft     # Velopack uses Squirrel-style NSIS under the hood
+Scope: user                 # SIDM installs to %LocalAppData% — user scope only
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+
+UpgradeBehavior: install    # Velopack handles its own in-place upgrade
+
+InstallerSwitches:
+  Silent: --silent
+  SilentWithProgress: --silent
+
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/snw-dev/SIDM/releases/download/v0.1.0/SIDM-Setup.exe
+    InstallerSha256: REPLACE_WITH_SHA256_OF_SETUP_EXE
+    ProductCode: '{REPLACE-WITH-VELOPACK-PRODUCT-GUID}'
+    ReleaseDate: 2026-05-11
+
+ManifestType: installer
+ManifestVersion: 1.6.0
