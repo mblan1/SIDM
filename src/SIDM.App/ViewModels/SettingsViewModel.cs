@@ -31,6 +31,15 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private CategoryRowViewModel? _selectedCategory;
 
+    [ObservableProperty]
+    private string? _ytDlpPath;
+
+    [ObservableProperty]
+    private string? _ffmpegPath;
+
+    [ObservableProperty]
+    private string? _ytDlpStatus;
+
     public ObservableCollection<ScheduleRuleRowViewModel> Rules { get; } = new();
 
     public ObservableCollection<CategoryRowViewModel> Categories { get; } = new();

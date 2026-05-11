@@ -7,7 +7,7 @@
                  xmlns:vm="clr-namespace:SIDM.App.ViewModels"
                  mc:Ignorable="d"
                  Title="Settings"
-                 Height="820"
+                 Height="900"
                  Width="640"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
@@ -123,6 +123,38 @@
                     <ui:Button Icon="{ui:SymbolIcon Symbol=Edit24}" Margin="8,0,0,0" Content="Edit" Click="OnEditCategory" />
                     <ui:Button Icon="{ui:SymbolIcon Symbol=Delete24}" Margin="8,0,0,0" Content="Remove" Click="OnDeleteCategory" />
                 </StackPanel>
+
+                <TextBlock Margin="0,24,0,0" Text="Video downloader" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
+                           Text="YouTube and similar URLs are downloaded with yt-dlp; ffmpeg merges audio + video for high-quality formats." />
+
+                <TextBlock Text="yt-dlp.exe path" Margin="0,4,0,4" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox Grid.Column="0" Text="{Binding YtDlpPath, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                                PlaceholderText="(leave blank to auto-detect via PATH)" />
+                    <ui:Button Grid.Column="1" Margin="8,0,0,0" Content="Browse…" Click="OnBrowseYtDlp" />
+                    <ui:Button Grid.Column="2" Margin="8,0,0,0" Content="Test" Click="OnTestYtDlp" />
+                </Grid>
+
+                <TextBlock Text="ffmpeg.exe path" Margin="0,12,0,4" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox Grid.Column="0" Text="{Binding FfmpegPath, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                                PlaceholderText="(leave blank to auto-detect via PATH)" />
+                    <ui:Button Grid.Column="1" Margin="8,0,0,0" Content="Browse…" Click="OnBrowseFfmpeg" />
+                </Grid>
+
+                <Border Background="#15FFFFFF" CornerRadius="4" Padding="8,6" Margin="0,8,0,0">
+                    <TextBlock Text="{Binding YtDlpStatus}" FontSize="11" Opacity="0.85" TextWrapping="Wrap" />
+                </Border>
 
                 <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF6B6B" Margin="0,12,0,0"
                            Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />

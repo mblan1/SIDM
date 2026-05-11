@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.IO;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SIDM.Core.Engine;
 using SIDM.Core.Models;
 using SIDM.Core.Persistence;
+using SIDM.VideoGrabber;
 
 namespace SIDM.App.Services;
 
@@ -15,6 +17,8 @@ namespace SIDM.App.Services;
 public sealed class DownloadEngine
 {
     private readonly DownloadOrchestrator _orchestrator;
+    private readonly IYtDlpRunner _ytDlpRunner;
+    private readonly VideoGrabberSettingsService _videoGrabberSettings;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IDownloadProgressSink _progressSink;
     private readonly ILogger<DownloadEngine> _logger;
@@ -31,11 +35,15 @@ public sealed class DownloadEngine
 
     public DownloadEngine(
         DownloadOrchestrator orchestrator,
+        IYtDlpRunner ytDlpRunner,
+        VideoGrabberSettingsService videoGrabberSettings,
         IServiceScopeFactory scopeFactory,
         IDownloadProgressSink progressSink,
         ILogger<DownloadEngine> logger)
     {
         _orchestrator = orchestrator;
+        _ytDlpRunner = ytDlpRunner;
+        _videoGrabberSettings = videoGrabberSettings;
         _scopeFactory = scopeFactory;
         _progressSink = progressSink;
         _logger = logger;
@@ -93,6 +101,14 @@ public sealed class DownloadEngine
         download.ErrorMessage = null;
         await repo.UpdateAsync(download, CancellationToken.None);
 
+        // Route by source: video sites go through yt-dlp instead of the HTTP
+        // segment orchestrator.
+        if (download.SourceKind == SourceKind.YouTube)
+        {
+            await RunYouTubeAsync(repo, download, cts);
+            return;
+        }
+
         var headers = ParseDictionary(download.HeadersJson);
         var cookies = ParseDictionary(download.CookiesJson);
 
@@ -139,6 +155,117 @@ public sealed class DownloadEngine
     {
         try { Finished?.Invoke(downloadId, status); }
         catch (Exception ex) { _logger.LogWarning(ex, "Finished handler threw for {Id}", downloadId); }
+    }
+
+    /// <summary>
+    /// yt-dlp run path. Spawns the binary, streams progress through the same
+    /// <see cref="IDownloadProgressSink"/> the HTTP engine uses (mapped to a
+    /// single synthetic segment with Idx=0 because yt-dlp does not expose
+    /// segment-level byte counts), and updates the row with the final file
+    /// path that yt-dlp emitted via <c>--print after_move:filepath</c>.
+    /// </summary>
+    private async Task RunYouTubeAsync(IDownloadRepository repo, Download download, CancellationTokenSource cts)
+    {
+        var ytDlpPath = _videoGrabberSettings.ResolveYtDlp();
+        if (string.IsNullOrEmpty(ytDlpPath))
+        {
+            _logger.LogWarning("yt-dlp not found; failing download {Id}", download.Id);
+            await UpdateStatusAsync(repo, download, DownloadStatus.Failed,
+                "yt-dlp.exe is not configured. Open Settings → Video downloader to set its path.");
+            CleanupActive(download.Id, cts);
+            RaiseFinished(download.Id, DownloadStatus.Failed);
+            return;
+        }
+
+        var outputDir = Path.GetDirectoryName(download.TargetPath);
+        if (string.IsNullOrWhiteSpace(outputDir))
+        {
+            await UpdateStatusAsync(repo, download, DownloadStatus.Failed,
+                "Target path has no directory component.");
+            CleanupActive(download.Id, cts);
+            RaiseFinished(download.Id, DownloadStatus.Failed);
+            return;
+        }
+
+        var sink = new ScopedSegmentProgressSink(download.Id, _progressSink);
+        long observedTotalBytes = 0;
+        long lastReportedBytes = 0;
+
+        var progress = new Progress<YtDlpProgress>(sample =>
+        {
+            // The HTTP engine reports cumulative bytes per segment; we map all
+            // yt-dlp progress to segment 0.
+            sink.Report(0, sample.DownloadedBytes);
+            lastReportedBytes = sample.DownloadedBytes;
+            if (sample.TotalBytes is { } total && total > observedTotalBytes)
+            {
+                observedTotalBytes = total;
+            }
+        });
+
+        var request = new YtDlpRunRequest(
+            Url: download.Url,
+            OutputDirectory: outputDir!,
+            YtDlpPath: ytDlpPath,
+            FfmpegPath: _videoGrabberSettings.ResolveFfmpeg());
+
+        YtDlpRunResult result;
+        try
+        {
+            result = await _ytDlpRunner.RunAsync(request, progress, cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "yt-dlp run crashed for {Id}", download.Id);
+            await UpdateStatusAsync(repo, download, DownloadStatus.Failed, ex.Message);
+            CleanupActive(download.Id, cts);
+            RaiseFinished(download.Id, DownloadStatus.Failed);
+            return;
+        }
+
+        // Persist a synthetic single-segment row so the UI's progress display
+        // and the resume math both have something coherent to work with.
+        var totalForRow = observedTotalBytes > 0 ? observedTotalBytes : lastReportedBytes;
+        if (totalForRow > 0)
+        {
+            await repo.ReplaceSegmentsAsync(download.Id, new[]
+            {
+                new Segment
+                {
+                    Idx = 0,
+                    StartByte = 0,
+                    EndByte = totalForRow - 1,
+                    BytesDownloaded = lastReportedBytes,
+                    Status = result.Success ? SegmentStatus.Completed : SegmentStatus.Pending,
+                },
+            });
+        }
+
+        if (cts.IsCancellationRequested)
+        {
+            download.Status = DownloadStatus.Paused;
+        }
+        else if (result.Success)
+        {
+            download.Status = DownloadStatus.Completed;
+            download.CompletedUtc = DateTimeOffset.UtcNow;
+            download.TotalBytes = lastReportedBytes > 0 ? lastReportedBytes : download.TotalBytes;
+            download.ErrorMessage = null;
+            if (!string.IsNullOrWhiteSpace(result.FinalFilePath))
+            {
+                download.TargetPath = result.FinalFilePath!;
+                download.FileName = Path.GetFileName(result.FinalFilePath!);
+            }
+        }
+        else
+        {
+            download.Status = DownloadStatus.Failed;
+            download.ErrorMessage = result.FailureMessage;
+        }
+
+        await repo.UpdateAsync(download);
+        CleanupActive(download.Id, cts);
+        RaiseFinished(download.Id, download.Status);
     }
 
     private async Task PersistResultAsync(IDownloadRepository repo, Download download, DownloadResult result)

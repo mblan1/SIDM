@@ -28,6 +28,7 @@
     <ProjectReference Include="..\SIDM.Core\SIDM.Core.csproj" />
     <ProjectReference Include="..\SIDM.Data\SIDM.Data.csproj" />
     <ProjectReference Include="..\SIDM.Ipc\SIDM.Ipc.csproj" />
+    <ProjectReference Include="..\SIDM.VideoGrabber\SIDM.VideoGrabber.csproj" />
   </ItemGroup>
 
   <ItemGroup>

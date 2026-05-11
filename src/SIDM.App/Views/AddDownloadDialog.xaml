@@ -60,17 +60,31 @@
             <TextBlock Margin="0,4,0,0" FontSize="11" Opacity="0.65"
                        Text="The folder is remembered for files with this extension." />
 
-            <TextBlock Text="Segments (parallel connections)" Margin="0,16,0,4" />
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Slider Grid.Column="0" Minimum="1" Maximum="16" TickFrequency="1" IsSnapToTickEnabled="True"
-                        Value="{Binding Segments, Mode=TwoWay}" />
-                <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
-                           Text="{Binding Segments}" />
-            </Grid>
+            <StackPanel Margin="0,16,0,0"
+                        Visibility="{Binding IsVideoUrl, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Border Background="#22FF8C00" CornerRadius="4" Padding="8,6">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Video24" Margin="0,0,8,0" />
+                        <TextBlock VerticalAlignment="Center" FontSize="12">
+                            <Run Text="Video URL detected — will download via yt-dlp." />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Visibility="{Binding IsVideoUrl, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=invert}">
+                <TextBlock Text="Segments (parallel connections)" Margin="0,16,0,4" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Slider Grid.Column="0" Minimum="1" Maximum="16" TickFrequency="1" IsSnapToTickEnabled="True"
+                            Value="{Binding Segments, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
+                               Text="{Binding Segments}" />
+                </Grid>
+            </StackPanel>
 
             <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF6B6B" Margin="0,12,0,0"
                        Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />

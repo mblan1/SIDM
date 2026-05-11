@@ -11,6 +11,7 @@
             </ResourceDictionary.MergedDictionaries>
 
             <conv:NullToCollapsedConverter x:Key="NullToCollapsedConverter" />
+            <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

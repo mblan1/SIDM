@@ -5,6 +5,7 @@ using SIDM.Core.Engine;
 using SIDM.Core.Http;
 using SIDM.Core.Persistence;
 using SIDM.Data;
+using SIDM.VideoGrabber;
 
 namespace SIDM.App.Composition;
 
@@ -15,6 +16,7 @@ public static class ServiceCollectionExtensions
         // SIDM.Core engine + HTTP infrastructure
         services.AddSidmHttp();
         services.AddSidmEngine();
+        services.AddSidmVideoGrabber();
 
         // SIDM.Data — SQLite at %LocalAppData%\SIDM\sidm.db, migrations applied at startup
         services.AddSidmData();
@@ -24,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DownloadEngine>();
         services.AddSingleton<DownloadQueue>();
         services.AddSingleton<BandwidthSettingsService>();
+        services.AddSingleton<VideoGrabberSettingsService>();
         services.AddSingleton<SchedulerService>();
         services.AddHostedService(sp => sp.GetRequiredService<SchedulerService>());
 

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SIDM.VideoGrabber;
 
 namespace SIDM.App.ViewModels;
 
@@ -32,6 +33,8 @@ public partial class AddDownloadViewModel : ObservableObject
                            && (u.Scheme == "http" || u.Scheme == "https")
                            && !string.IsNullOrWhiteSpace(TargetFolder);
 
+    public bool IsVideoUrl => YouTubeUrlDetector.IsVideoUrl(Url);
+
     public string TargetPath => Path.Combine(TargetFolder, string.IsNullOrWhiteSpace(FileName)
         ? GuessFileNameFromUrl(Url)
         : FileName);
@@ -50,6 +53,7 @@ public partial class AddDownloadViewModel : ObservableObject
         }
         OnPropertyChanged(nameof(IsValid));
         OnPropertyChanged(nameof(TargetPath));
+        OnPropertyChanged(nameof(IsVideoUrl));
     }
 
     partial void OnFileNameChanged(string value)

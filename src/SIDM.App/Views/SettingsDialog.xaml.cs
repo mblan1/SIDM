@@ -1,8 +1,11 @@
+using System.IO;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32;
 using SIDM.App.Services;
 using SIDM.App.ViewModels;
 using SIDM.Core.Persistence;
+using SIDM.VideoGrabber;
 using Wpf.Ui.Controls;
 
 namespace SIDM.App.Views;
@@ -12,6 +15,7 @@ public partial class SettingsDialog : FluentWindow
     private readonly DownloadQueue _queue;
     private readonly BandwidthSettingsService _bandwidth;
     private readonly SchedulerService _scheduler;
+    private readonly VideoGrabberSettingsService _videoGrabber;
     private readonly IServiceScopeFactory _scopeFactory;
 
     public SettingsViewModel ViewModel { get; } = new();
@@ -20,20 +24,34 @@ public partial class SettingsDialog : FluentWindow
         DownloadQueue queue,
         BandwidthSettingsService bandwidth,
         SchedulerService scheduler,
+        VideoGrabberSettingsService videoGrabber,
         IServiceScopeFactory scopeFactory)
     {
         InitializeComponent();
         _queue = queue;
         _bandwidth = bandwidth;
         _scheduler = scheduler;
+        _videoGrabber = videoGrabber;
         _scopeFactory = scopeFactory;
         DataContext = ViewModel;
 
         ViewModel.MaxConcurrent = _queue.MaxConcurrent;
         ViewModel.SetFromBytes(_bandwidth.CurrentBytesPerSecond);
+        ViewModel.YtDlpPath = _videoGrabber.YtDlpPathOverride;
+        ViewModel.FfmpegPath = _videoGrabber.FfmpegPathOverride;
+        ViewModel.YtDlpStatus = BuildResolvedPathStatus();
 
         _ = LoadRulesAsync();
         _ = LoadCategoriesAsync();
+    }
+
+    private string BuildResolvedPathStatus()
+    {
+        var resolvedYt = _videoGrabber.ResolveYtDlp();
+        var resolvedFf = _videoGrabber.ResolveFfmpeg();
+        if (resolvedYt is null) return "yt-dlp.exe: not found";
+        var ff = resolvedFf is null ? "ffmpeg: not found (downloads still work for non-merged formats)" : $"ffmpeg: {resolvedFf}";
+        return $"yt-dlp.exe: {resolvedYt}\n{ff}";
     }
 
     private void OnCancel(object sender, RoutedEventArgs e)
@@ -68,8 +86,65 @@ public partial class SettingsDialog : FluentWindow
         // the now-stale value next time it re-applies a rule override.
         _scheduler.SetUserBaseline(ViewModel.MaxConcurrent, ViewModel.BandwidthBytesPerSecond);
 
+        // Persist VideoGrabber binary paths.
+        await _videoGrabber.SetYtDlpPathAsync(ViewModel.YtDlpPath);
+        await _videoGrabber.SetFfmpegPathAsync(ViewModel.FfmpegPath);
+
         DialogResult = true;
         Close();
+    }
+
+    private void OnBrowseYtDlp(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Filter = "yt-dlp executable|yt-dlp.exe|All files|*.*",
+            InitialDirectory = TryGetDirectory(ViewModel.YtDlpPath),
+        };
+        if (dlg.ShowDialog(this) == true)
+        {
+            ViewModel.YtDlpPath = dlg.FileName;
+        }
+    }
+
+    private void OnBrowseFfmpeg(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Filter = "ffmpeg executable|ffmpeg.exe|All files|*.*",
+            InitialDirectory = TryGetDirectory(ViewModel.FfmpegPath),
+        };
+        if (dlg.ShowDialog(this) == true)
+        {
+            ViewModel.FfmpegPath = dlg.FileName;
+        }
+    }
+
+    private async void OnTestYtDlp(object sender, RoutedEventArgs e)
+    {
+        var resolved = YtDlpPathResolver.ResolveYtDlp(ViewModel.YtDlpPath);
+        if (resolved is null)
+        {
+            ViewModel.YtDlpStatus = "yt-dlp.exe not found at the given path and not on PATH.";
+            return;
+        }
+        ViewModel.YtDlpStatus = $"Checking {resolved}…";
+        var version = await YtDlpPathResolver.TryGetYtDlpVersionAsync(resolved);
+        ViewModel.YtDlpStatus = version is null
+            ? $"{resolved} did not respond to --version."
+            : $"OK — yt-dlp {version} at {resolved}";
+    }
+
+    private static string TryGetDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return "";
+        try
+        {
+            if (File.Exists(path)) return Path.GetDirectoryName(path) ?? "";
+            if (Directory.Exists(path)) return path;
+        }
+        catch { }
+        return "";
     }
 
     private async Task LoadRulesAsync()

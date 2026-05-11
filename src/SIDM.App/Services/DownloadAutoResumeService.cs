@@ -19,26 +19,31 @@ public sealed class DownloadAutoResumeService : IHostedService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DownloadQueue _queue;
     private readonly BandwidthSettingsService _bandwidth;
+    private readonly VideoGrabberSettingsService _videoGrabber;
     private readonly ILogger<DownloadAutoResumeService> _logger;
 
     public DownloadAutoResumeService(
         IServiceScopeFactory scopeFactory,
         DownloadQueue queue,
         BandwidthSettingsService bandwidth,
+        VideoGrabberSettingsService videoGrabber,
         ILogger<DownloadAutoResumeService> logger)
     {
         _scopeFactory = scopeFactory;
         _queue = queue;
         _bandwidth = bandwidth;
+        _videoGrabber = videoGrabber;
         _logger = logger;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         // Apply persisted user settings BEFORE we (re)enqueue anything — the
-        // queue cap and bandwidth cap need to be live when downloads start.
+        // queue cap, bandwidth cap, and video-grabber paths need to be live
+        // when downloads start.
         await _queue.LoadAsync(cancellationToken);
         await _bandwidth.LoadAsync(cancellationToken);
+        await _videoGrabber.LoadAsync(cancellationToken);
 
         long[] orphanIds;
         await using (var scope = _scopeFactory.CreateAsyncScope())

@@ -10,6 +10,7 @@ using SIDM.App.Views;
 using SIDM.Core.Models;
 using SIDM.Core.Persistence;
 using SIDM.Ipc;
+using SIDM.VideoGrabber;
 
 namespace SIDM.App.ViewModels;
 
@@ -237,6 +238,8 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 
         var headers = seed is null ? null : MergeHeaders(seed.Headers, seed.Referer, seed.UserAgent);
 
+        var isVideo = YouTubeUrlDetector.IsVideoUrl(vm.Url);
+
         var download = new Download
         {
             Url = vm.Url,
@@ -248,6 +251,7 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             Mime = vm.Mime ?? seed?.Mime,
             TotalBytes = vm.ExpectedLength ?? seed?.ExpectedLength,
             CategoryId = await TryGetCategoryIdAsync(fileName),
+            SourceKind = isVideo ? SourceKind.YouTube : SourceKind.Direct,
             HeadersJson = headers is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(headers) : null,
             CookiesJson = seed?.Cookies is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(seed.Cookies) : null,
         };
