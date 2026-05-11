@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,7 +16,7 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
     private readonly Download _model;
     private readonly UiProgressBus _bus;
     private IDisposable? _subscription;
-    private readonly Dictionary<int, long> _segmentBytes = new();
+    private readonly Dictionary<int, SegmentProgressViewModel> _segmentByIdx = new();
 
     public DownloadRowViewModel(Download model, UiProgressBus bus)
     {
@@ -25,9 +26,12 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
         _status = model.Status;
         _totalBytes = model.TotalBytes;
 
-        foreach (var s in model.Segments)
+        SegmentRows = new ObservableCollection<SegmentProgressViewModel>();
+        foreach (var s in model.Segments.OrderBy(s => s.Idx))
         {
-            _segmentBytes[s.Idx] = s.BytesDownloaded;
+            var seg = new SegmentProgressViewModel(s);
+            _segmentByIdx[s.Idx] = seg;
+            SegmentRows.Add(seg);
         }
 
         _subscription = bus.Subscribe(model.Id, OnSegmentProgress);
@@ -37,6 +41,10 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
     public string Url => _model.Url;
     public string FileName => _model.FileName;
     public string TargetPath => _model.TargetPath;
+    public int SegmentCount => _model.SegmentCount;
+    public string? Mime => _model.Mime;
+
+    public ObservableCollection<SegmentProgressViewModel> SegmentRows { get; }
 
     [ObservableProperty]
     private DownloadStatus _status;
@@ -64,28 +72,30 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
 
     public string StatusDisplay => Status.ToString();
 
+    public string TotalBytesDisplay => TotalBytes is { } t ? FormatBytes(t) : "Unknown";
+
     private void OnSegmentProgress(int segmentIndex, long bytes)
     {
-        _segmentBytes[segmentIndex] = bytes;
-        var total = _segmentBytes.Values.Sum();
-
-        // Marshal to UI thread.
         var dispatcher = Application.Current?.Dispatcher;
         if (dispatcher is null || dispatcher.CheckAccess())
         {
-            BytesDownloaded = total;
-            OnPropertyChanged(nameof(ProgressPercent));
-            OnPropertyChanged(nameof(ProgressDisplay));
+            ApplySegmentProgress(segmentIndex, bytes);
         }
         else
         {
-            dispatcher.BeginInvoke(() =>
-            {
-                BytesDownloaded = total;
-                OnPropertyChanged(nameof(ProgressPercent));
-                OnPropertyChanged(nameof(ProgressDisplay));
-            });
+            dispatcher.BeginInvoke(() => ApplySegmentProgress(segmentIndex, bytes));
         }
+    }
+
+    private void ApplySegmentProgress(int segmentIndex, long bytes)
+    {
+        if (_segmentByIdx.TryGetValue(segmentIndex, out var seg))
+        {
+            seg.UpdateBytes(bytes);
+        }
+        BytesDownloaded = _segmentByIdx.Values.Sum(s => s.BytesDownloaded);
+        OnPropertyChanged(nameof(ProgressPercent));
+        OnPropertyChanged(nameof(ProgressDisplay));
     }
 
     /// <summary>Refreshes from the latest persisted model (call after status changes).</summary>
@@ -95,13 +105,48 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
         TotalBytes = fresh.TotalBytes;
         if (fresh.Segments.Count > 0)
         {
-            _segmentBytes.Clear();
-            foreach (var s in fresh.Segments) _segmentBytes[s.Idx] = s.BytesDownloaded;
-            BytesDownloaded = _segmentBytes.Values.Sum();
+            // Rebuild on shape change (split happens once on first probe).
+            var freshOrdered = fresh.Segments.OrderBy(s => s.Idx).ToList();
+            var dispatcher = Application.Current?.Dispatcher;
+            void apply()
+            {
+                if (freshOrdered.Count != SegmentRows.Count
+                    || freshOrdered.Any(s => !_segmentByIdx.ContainsKey(s.Idx)))
+                {
+                    SegmentRows.Clear();
+                    _segmentByIdx.Clear();
+                    foreach (var s in freshOrdered)
+                    {
+                        var vm = new SegmentProgressViewModel(s);
+                        _segmentByIdx[s.Idx] = vm;
+                        SegmentRows.Add(vm);
+                    }
+                }
+                else
+                {
+                    foreach (var s in freshOrdered)
+                    {
+                        var vm = _segmentByIdx[s.Idx];
+                        vm.UpdateBytes(s.BytesDownloaded);
+                        vm.UpdateStatus(s.Status);
+                    }
+                }
+                BytesDownloaded = _segmentByIdx.Values.Sum(s => s.BytesDownloaded);
+                OnPropertyChanged(nameof(ProgressPercent));
+                OnPropertyChanged(nameof(ProgressDisplay));
+                OnPropertyChanged(nameof(StatusDisplay));
+                OnPropertyChanged(nameof(TotalBytesDisplay));
+            }
+            if (dispatcher is null || dispatcher.CheckAccess()) apply();
+            else dispatcher.BeginInvoke(apply);
         }
-        OnPropertyChanged(nameof(ProgressPercent));
-        OnPropertyChanged(nameof(ProgressDisplay));
-        OnPropertyChanged(nameof(StatusDisplay));
+        else
+        {
+            OnPropertyChanged(nameof(ProgressPercent));
+            OnPropertyChanged(nameof(ProgressDisplay));
+            OnPropertyChanged(nameof(StatusDisplay));
+            OnPropertyChanged(nameof(TotalBytesDisplay));
+        }
     }
 
     public void Dispose()

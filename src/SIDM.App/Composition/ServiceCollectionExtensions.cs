@@ -46,6 +46,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MainWindow>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<DownloadsViewModel>();
+        // DownloadsViewModel owns the dispatcher and the rows collection, so it
+        // implements IDownloadIntake too (the IPC dispatcher consults it to
+        // surface the IDM-style popup for browser-initiated downloads).
+        services.AddSingleton<IDownloadIntake>(sp => sp.GetRequiredService<DownloadsViewModel>());
 
         return services;
     }

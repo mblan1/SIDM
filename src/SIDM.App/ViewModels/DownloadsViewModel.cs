@@ -1,17 +1,23 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SIDM.App.Services;
+using SIDM.App.Views;
 using SIDM.Core.Models;
 using SIDM.Core.Persistence;
+using SIDM.Ipc;
 
 namespace SIDM.App.ViewModels;
 
-public partial class DownloadsViewModel : ObservableObject
+public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 {
+    /// <summary>Settings key prefix for the remembered folder of a given file extension.</summary>
+    private const string FolderKeyPrefix = "download.folder.";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DownloadEngine _engine;
     private readonly UiProgressBus _bus;
@@ -96,26 +102,104 @@ public partial class DownloadsViewModel : ObservableObject
         StatusBarText = $"{Rows.Count} download{(Rows.Count == 1 ? "" : "s")}";
     }
 
+    /// <summary>
+    /// Implements <see cref="IDownloadIntake"/>. Called by the IPC dispatcher on
+    /// a worker thread when a browser extension forwards a download capture.
+    /// Marshals to the UI thread, shows the popup, and on accept creates the
+    /// row + starts the engine + opens the progress window.
+    /// </summary>
+    public async Task<DownloadIntakeResult> PromptAsync(DownloadRequestMessage request, CancellationToken cancellationToken)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            return new DownloadIntakeResult(null, "Canceled");
+        }
+
+        return await dispatcher.InvokeAsync(async () =>
+        {
+            var row = await ShowDialogAndStartAsync(request);
+            return row is null
+                ? new DownloadIntakeResult(null, "Canceled")
+                : new DownloadIntakeResult(row.Id, row.Status.ToString());
+        }).Task.Unwrap();
+    }
+
     [RelayCommand]
     private async Task AddAsync()
     {
-        var dialog = new Views.AddDownloadDialog
+        await ShowDialogAndStartAsync(seed: null);
+    }
+
+    /// <summary>
+    /// Core entry point for the IDM-style flow: show the seed-filled popup,
+    /// remember the folder per extension, create the row, start the engine,
+    /// and open the per-download progress window. Returns the row on accept,
+    /// null on cancel.
+    /// </summary>
+    private async Task<DownloadRowViewModel?> ShowDialogAndStartAsync(DownloadRequestMessage? seed)
+    {
+        var owner = Application.Current?.MainWindow;
+
+        var dialog = new AddDownloadDialog
         {
-            Owner = Application.Current?.MainWindow,
+            Owner = owner,
         };
 
-        if (dialog.ShowDialog() != true) return;
+        if (seed is not null)
+        {
+            dialog.ViewModel.Url = seed.Url;
+            dialog.ViewModel.FileName = !string.IsNullOrWhiteSpace(seed.FileName)
+                ? seed.FileName!
+                : AddDownloadViewModel.GuessFileNameFromUrl(seed.Url);
+            dialog.ViewModel.ExpectedLength = seed.ExpectedLength;
+            dialog.ViewModel.Mime = seed.Mime;
+
+            // Pre-fill the folder: remembered-for-this-extension wins over the
+            // browser's suggested folder, which wins over the default.
+            var rememberedFolder = await TryGetRememberedFolderAsync(dialog.ViewModel.Extension);
+            if (!string.IsNullOrWhiteSpace(rememberedFolder))
+            {
+                dialog.ViewModel.TargetFolder = rememberedFolder!;
+            }
+            else if (!string.IsNullOrWhiteSpace(seed.SuggestedFolder))
+            {
+                dialog.ViewModel.TargetFolder = seed.SuggestedFolder!;
+            }
+        }
+        else
+        {
+            // UI-button flow: pre-fill from clipboard URL? skipped for MVP.
+            // Still respect any extension-remembered default folder as the
+            // filename is typed.
+        }
+
+        if (dialog.ShowDialog() != true) return null;
         var vm = dialog.ViewModel;
-        if (!vm.IsValid) return;
+        if (!vm.IsValid) return null;
+
+        // Persist this folder as the remembered location for this extension.
+        await RememberFolderAsync(vm.Extension, vm.TargetFolder);
+
+        var fileName = string.IsNullOrWhiteSpace(vm.FileName)
+            ? AddDownloadViewModel.GuessFileNameFromUrl(vm.Url)
+            : vm.FileName;
+        var targetPath = Path.Combine(vm.TargetFolder, fileName);
+
+        var headers = seed is null ? null : MergeHeaders(seed.Headers, seed.Referer, seed.UserAgent);
 
         var download = new Download
         {
             Url = vm.Url,
-            FileName = string.IsNullOrWhiteSpace(vm.FileName) ? AddDownloadViewModel.GuessFileNameFromUrl(vm.Url) : vm.FileName,
-            TargetPath = vm.TargetPath,
+            FileName = fileName,
+            TargetPath = targetPath,
             Status = DownloadStatus.Queued,
             SegmentCount = vm.Segments,
             CreatedUtc = DateTimeOffset.UtcNow,
+            Mime = vm.Mime ?? seed?.Mime,
+            TotalBytes = vm.ExpectedLength ?? seed?.ExpectedLength,
+            HeadersJson = headers is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(headers) : null,
+            CookiesJson = seed?.Cookies is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(seed.Cookies) : null,
         };
 
         long id;
@@ -130,16 +214,29 @@ public partial class DownloadsViewModel : ObservableObject
         Rows.Insert(0, row);
         StatusBarText = $"Queued {download.FileName}";
 
-        // No-op for the in-process flow (we already added the row above; the
-        // notifier's AddRowFromDbAsync dedupe guard skips it). Kept for symmetry.
+        // The notifier dedupes against Rows so this is a no-op for this path.
+        // Kept for symmetry with the legacy direct-IPC path.
         _notifier.Publish(id);
 
         await _engine.StartAsync(id);
         StatusBarText = $"Downloading {download.FileName}";
 
-        // Periodically refresh row from DB to pick up status changes (cheap MVP — a
-        // proper bus event would replace this in Phase 1.K+).
         _ = MonitorAsync(row);
+
+        // Open the per-download progress window with chunks.
+        ShowProgressDialog(row);
+
+        return row;
+    }
+
+    private void ShowProgressDialog(DownloadRowViewModel row)
+    {
+        var owner = Application.Current?.MainWindow;
+        var dlg = new DownloadProgressDialog(row, _engine)
+        {
+            Owner = owner,
+        };
+        dlg.Show();
     }
 
     [RelayCommand]
@@ -196,5 +293,49 @@ public partial class DownloadsViewModel : ObservableObject
         {
             StatusBarText = $"Completed {row.FileName}";
         }
+    }
+
+    private async Task<string?> TryGetRememberedFolderAsync(string extension)
+    {
+        if (string.IsNullOrWhiteSpace(extension)) return null;
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+            return await settings.GetAsync<string>(FolderKeyPrefix + extension);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to read remembered folder for .{Ext}", extension);
+            return null;
+        }
+    }
+
+    private async Task RememberFolderAsync(string extension, string folder)
+    {
+        if (string.IsNullOrWhiteSpace(extension) || string.IsNullOrWhiteSpace(folder)) return;
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+            await settings.SetAsync(FolderKeyPrefix + extension, folder);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to remember folder for .{Ext}", extension);
+        }
+    }
+
+    private static Dictionary<string, string>? MergeHeaders(
+        Dictionary<string, string>? extra, string? referer, string? userAgent)
+    {
+        var merged = extra is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(extra, StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(referer) && !merged.ContainsKey("Referer"))
+            merged["Referer"] = referer;
+        if (!string.IsNullOrWhiteSpace(userAgent) && !merged.ContainsKey("User-Agent"))
+            merged["User-Agent"] = userAgent;
+        return merged.Count == 0 ? null : merged;
     }
 }

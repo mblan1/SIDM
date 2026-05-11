@@ -1,0 +1,107 @@
+<ui:FluentWindow x:Class="SIDM.App.Views.DownloadProgressDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:vm="clr-namespace:SIDM.App.ViewModels"
+                 mc:Ignorable="d"
+                 Title="Download progress"
+                 Height="560"
+                 Width="720"
+                 MinHeight="420"
+                 MinWidth="560"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 WindowStartupLocation="CenterOwner"
+                 ShowInTaskbar="True"
+                 d:DataContext="{d:DesignInstance Type=vm:DownloadRowViewModel}">
+    <Grid Margin="24,48,24,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Grid.RowSpan="5" VerticalAlignment="Top" Title="Download progress" />
+
+        <!-- File summary -->
+        <Border Grid.Row="0" Background="#15FFFFFF" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ui:SymbolIcon Grid.Column="0" Symbol="ArrowDownload24" FontSize="36"
+                               VerticalAlignment="Center" Margin="0,0,12,0" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding TargetPath}" Opacity="0.65" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                    <TextBlock Text="{Binding Url}" Opacity="0.65" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Overall progress -->
+        <StackPanel Grid.Row="1" Margin="0,12,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding ProgressDisplay}" FontSize="12" />
+                <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" FontWeight="SemiBold" />
+            </Grid>
+            <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100" Height="8" Margin="0,6,0,0" />
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" FontSize="11" Opacity="0.7">
+                    <Run Text="Total size: " />
+                    <Run Text="{Binding TotalBytesDisplay, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock Grid.Column="1" FontSize="11" Opacity="0.7">
+                    <Run Text="Segments: " />
+                    <Run Text="{Binding SegmentCount, Mode=OneWay}" />
+                </TextBlock>
+            </Grid>
+        </StackPanel>
+
+        <!-- Chunks header -->
+        <TextBlock Grid.Row="2" Text="Chunks" Margin="0,16,0,6" FontWeight="SemiBold" />
+
+        <!-- Per-chunk grid -->
+        <Border Grid.Row="3" Background="#15FFFFFF" CornerRadius="8" Padding="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding SegmentRows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="4,4,4,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="180" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding RangeDisplay}" FontSize="11" Opacity="0.85" VerticalAlignment="Center" />
+                                <ProgressBar Grid.Column="1" Value="{Binding Percent, Mode=OneWay}" Maximum="100" Height="6" Margin="8,0,8,0" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding ProgressDisplay}" FontSize="11" Opacity="0.85" VerticalAlignment="Center" TextAlignment="Right" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Action buttons -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <ui:Button Content="Pause" Margin="0,0,8,0" Icon="{ui:SymbolIcon Symbol=Pause24}" Click="OnPause" />
+            <ui:Button Content="Resume" Margin="0,0,8,0" Icon="{ui:SymbolIcon Symbol=Play24}" Click="OnResume" />
+            <ui:Button Content="Close" Appearance="Primary" Click="OnClose" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

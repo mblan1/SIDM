@@ -7,8 +7,8 @@
                  xmlns:vm="clr-namespace:SIDM.App.ViewModels"
                  mc:Ignorable="d"
                  Title="Add download"
-                 Height="380"
-                 Width="640"
+                 Height="480"
+                 Width="660"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
@@ -30,6 +30,21 @@
             <ui:TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
                         PlaceholderText="https://example.com/installer.exe" />
 
+            <Grid Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="Size: " Opacity="0.7" />
+                    <TextBlock Text="{Binding SizeDisplay}" FontWeight="SemiBold" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <TextBlock Text="Type: " Opacity="0.7" />
+                    <TextBlock Text="{Binding MimeDisplay}" FontWeight="SemiBold" />
+                </StackPanel>
+            </Grid>
+
             <TextBlock Text="File name" Margin="0,16,0,4" />
             <ui:TextBox Text="{Binding FileName, UpdateSourceTrigger=PropertyChanged}" />
 
@@ -42,6 +57,8 @@
                 <ui:TextBox Grid.Column="0" Text="{Binding TargetFolder, UpdateSourceTrigger=PropertyChanged}" />
                 <ui:Button Grid.Column="1" Margin="8,0,0,0" Content="Browse…" Click="OnBrowse" />
             </Grid>
+            <TextBlock Margin="0,4,0,0" FontSize="11" Opacity="0.65"
+                       Text="The folder is remembered for files with this extension." />
 
             <TextBlock Text="Segments (parallel connections)" Margin="0,16,0,4" />
             <Grid>
@@ -61,7 +78,7 @@
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" />
-            <ui:Button Content="Download" Appearance="Primary" Click="OnAccept" IsDefault="True" />
+            <ui:Button Content="Start download" Appearance="Primary" Click="OnAccept" IsDefault="True" />
         </StackPanel>
     </Grid>
 </ui:FluentWindow>

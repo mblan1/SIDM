@@ -1,16 +1,14 @@
-using System.IO;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using SIDM.Core.Models;
-using SIDM.Core.Persistence;
 using SIDM.Ipc;
 
 namespace SIDM.App.Services;
 
 /// <summary>
 /// Translates inbound <see cref="IpcMessage"/>s into application actions:
-/// hello → reply with our capabilities; download → create a Downloads row and
-/// kick the engine.
+/// hello → reply with capabilities; download → hand off to the
+/// <see cref="IDownloadIntake"/> which shows the IDM-style popup (file info,
+/// folder picker), and on accept creates the row + starts the engine. The
+/// dispatcher itself never touches the database or the UI directly.
 /// </summary>
 public sealed class IpcDispatcher
 {
@@ -22,23 +20,17 @@ public sealed class IpcDispatcher
     /// </summary>
     private static readonly TimeSpan DuplicateWindow = TimeSpan.FromSeconds(5);
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly DownloadEngine _engine;
-    private readonly DownloadCreatedNotifier _notifier;
+    private readonly IDownloadIntake _intake;
     private readonly ILogger<IpcDispatcher> _logger;
 
     private readonly object _recentLock = new();
     private readonly Dictionary<string, (long Id, DateTimeOffset At)> _recent = new();
 
     public IpcDispatcher(
-        IServiceScopeFactory scopeFactory,
-        DownloadEngine engine,
-        DownloadCreatedNotifier notifier,
+        IDownloadIntake intake,
         ILogger<IpcDispatcher> logger)
     {
-        _scopeFactory = scopeFactory;
-        _engine = engine;
-        _notifier = notifier;
+        _intake = intake;
         _logger = logger;
     }
 
@@ -73,47 +65,17 @@ public sealed class IpcDispatcher
             return new DownloadResponseMessage(recentId, "DuplicateSuppressed");
         }
 
-        var fileName = !string.IsNullOrWhiteSpace(req.FileName)
-            ? req.FileName
-            : ViewModels.AddDownloadViewModel.GuessFileNameFromUrl(req.Url);
+        var result = await _intake.PromptAsync(req, cancellationToken);
 
-        var folder = !string.IsNullOrWhiteSpace(req.SuggestedFolder)
-            ? req.SuggestedFolder
-            : ViewModels.AddDownloadViewModel.DefaultDownloadsFolder();
-
-        Directory.CreateDirectory(folder);
-        var targetPath = Path.Combine(folder, fileName);
-
-        var headers = MergeHeaders(req.Headers, req.Referer, req.UserAgent);
-
-        var download = new Download
+        if (result.DownloadId is null)
         {
-            Url = req.Url,
-            FileName = fileName,
-            TargetPath = targetPath,
-            Status = DownloadStatus.Queued,
-            CreatedUtc = DateTimeOffset.UtcNow,
-            SegmentCount = 8,
-            Mime = req.Mime,
-            TotalBytes = req.ExpectedLength,
-            HeadersJson = headers is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(headers) : null,
-            CookiesJson = req.Cookies is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(req.Cookies) : null,
-        };
-
-        long id;
-        await using (var scope = _scopeFactory.CreateAsyncScope())
-        {
-            var repo = scope.ServiceProvider.GetRequiredService<IDownloadRepository>();
-            id = await repo.AddAsync(download, cancellationToken);
+            _logger.LogInformation("User canceled IPC download for {Url}", req.Url);
+            return new DownloadResponseMessage(0, result.Status);
         }
 
-        RecordRecent(req.Url, id);
-        _notifier.Publish(id);
-
-        await _engine.StartAsync(id, cancellationToken);
-        _logger.LogInformation("Enqueued IPC download {Id} for {Url}", id, req.Url);
-
-        return new DownloadResponseMessage(id, DownloadStatus.Queued.ToString());
+        RecordRecent(req.Url, result.DownloadId.Value);
+        _logger.LogInformation("Enqueued IPC download {Id} for {Url}", result.DownloadId, req.Url);
+        return new DownloadResponseMessage(result.DownloadId.Value, result.Status);
     }
 
     private long? TryGetRecent(string url)
@@ -132,16 +94,5 @@ public sealed class IpcDispatcher
     private void RecordRecent(string url, long id)
     {
         lock (_recentLock) { _recent[url] = (id, DateTimeOffset.UtcNow); }
-    }
-
-    private static Dictionary<string, string>? MergeHeaders(
-        Dictionary<string, string>? extra, string? referer, string? userAgent)
-    {
-        var merged = extra is null ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) : new Dictionary<string, string>(extra, StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(referer) && !merged.ContainsKey("Referer"))
-            merged["Referer"] = referer;
-        if (!string.IsNullOrWhiteSpace(userAgent) && !merged.ContainsKey("User-Agent"))
-            merged["User-Agent"] = userAgent;
-        return merged.Count == 0 ? null : merged;
     }
 }
