@@ -22,6 +22,7 @@
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="Serilog.Sinks.Debug" />
     <PackageReference Include="Microsoft.Win32.Registry" />
+    <PackageReference Include="Velopack" />
   </ItemGroup>
 
   <ItemGroup>

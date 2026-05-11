@@ -7,6 +7,7 @@ using Serilog;
 using SIDM.App.Composition;
 using SIDM.App.Services;
 using SIDM.Core;
+using Velopack;
 
 namespace SIDM.App;
 
@@ -18,6 +19,15 @@ public partial class App : Application
 
     public App()
     {
+        // Velopack must be initialized as early as possible — it handles the
+        // app's special-purpose lifecycle hooks (--squirrel-firstrun,
+        // --squirrel-updated, --squirrel-obsolete) without ever showing the
+        // main window. Without this call, an installer/update would launch
+        // the WPF UI during a silent hook and the install would visibly hang.
+        VelopackApp.Build()
+            .WithFirstRun(_ => OnFirstRun())
+            .Run();
+
         _cliArgs = Environment.GetCommandLineArgs().Skip(1).ToArray();
         _isCliMode = IsCliCommand(_cliArgs);
 
@@ -104,6 +114,29 @@ public partial class App : Application
 
     private static bool IsCliCommand(string[] args) =>
         args.Length > 0 && args[0] is "--register-hosts" or "--unregister-hosts" or "--hosts-status";
+
+    /// <summary>
+    /// Called by Velopack on the very first launch after a fresh install.
+    /// Used to register the Native Messaging Host manifests so the browser
+    /// extension works without the user running --register-hosts manually.
+    /// Best-effort: failures are logged (when Serilog is up) and never block
+    /// the launch.
+    /// </summary>
+    private static void OnFirstRun()
+    {
+        try
+        {
+            var result = NativeHostRegistration.Register();
+            // We can't reliably log here — Serilog hasn't been configured yet
+            // when first-run runs ahead of the normal startup. Failures will
+            // surface via the existing --hosts-status command later.
+            _ = result;
+        }
+        catch
+        {
+            // Swallow — first-run must not block the app starting.
+        }
+    }
 
     private static int ExecuteCliCommand(string[] args)
     {
