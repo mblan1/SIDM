@@ -40,6 +40,18 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string? _ytDlpStatus;
 
+    [ObservableProperty]
+    private string? _updateFeedUrl;
+
+    [ObservableProperty]
+    private bool _autoCheckUpdates;
+
+    [ObservableProperty]
+    private string? _updateStatus;
+
+    [ObservableProperty]
+    private bool _updateReadyToApply;
+
     public ObservableCollection<ScheduleRuleRowViewModel> Rules { get; } = new();
 
     public ObservableCollection<CategoryRowViewModel> Categories { get; } = new();

@@ -16,6 +16,7 @@ public partial class SettingsDialog : FluentWindow
     private readonly BandwidthSettingsService _bandwidth;
     private readonly SchedulerService _scheduler;
     private readonly VideoGrabberSettingsService _videoGrabber;
+    private readonly UpdaterService _updater;
     private readonly IServiceScopeFactory _scopeFactory;
 
     public SettingsViewModel ViewModel { get; } = new();
@@ -25,6 +26,7 @@ public partial class SettingsDialog : FluentWindow
         BandwidthSettingsService bandwidth,
         SchedulerService scheduler,
         VideoGrabberSettingsService videoGrabber,
+        UpdaterService updater,
         IServiceScopeFactory scopeFactory)
     {
         InitializeComponent();
@@ -32,6 +34,7 @@ public partial class SettingsDialog : FluentWindow
         _bandwidth = bandwidth;
         _scheduler = scheduler;
         _videoGrabber = videoGrabber;
+        _updater = updater;
         _scopeFactory = scopeFactory;
         DataContext = ViewModel;
 
@@ -40,6 +43,8 @@ public partial class SettingsDialog : FluentWindow
         ViewModel.YtDlpPath = _videoGrabber.YtDlpPathOverride;
         ViewModel.FfmpegPath = _videoGrabber.FfmpegPathOverride;
         ViewModel.YtDlpStatus = BuildResolvedPathStatus();
+        ViewModel.UpdateFeedUrl = _updater.FeedUrl;
+        ViewModel.AutoCheckUpdates = _updater.AutoCheckOnStartup;
 
         _ = LoadRulesAsync();
         _ = LoadCategoriesAsync();
@@ -90,8 +95,38 @@ public partial class SettingsDialog : FluentWindow
         await _videoGrabber.SetYtDlpPathAsync(ViewModel.YtDlpPath);
         await _videoGrabber.SetFfmpegPathAsync(ViewModel.FfmpegPath);
 
+        // Persist updater preferences.
+        await _updater.SetFeedUrlAsync(ViewModel.UpdateFeedUrl);
+        await _updater.SetAutoCheckAsync(ViewModel.AutoCheckUpdates);
+
         DialogResult = true;
         Close();
+    }
+
+    private async void OnCheckUpdates(object sender, RoutedEventArgs e)
+    {
+        // The user may have typed a feed URL but not hit Save yet; honor the
+        // current text-box value so "Check now" works without a save round-trip.
+        await _updater.SetFeedUrlAsync(ViewModel.UpdateFeedUrl);
+        ViewModel.UpdateStatus = "Checking…";
+        ViewModel.UpdateReadyToApply = false;
+
+        var result = await _updater.CheckAsync();
+        ViewModel.UpdateStatus = result.Message;
+        ViewModel.UpdateReadyToApply = result.State == UpdateCheckState.UpdateAvailable;
+    }
+
+    private void OnApplyUpdate(object sender, RoutedEventArgs e)
+    {
+        // ApplyUpdatesAndRestart kills the current process and relaunches the
+        // new one — the OS dispatches a fresh SIDM.App.exe under the hood.
+        // There's no path back from here; nothing to await.
+        var applied = _updater.ApplyPendingAndRestart();
+        if (!applied)
+        {
+            ViewModel.UpdateStatus = "No pending update to apply.";
+            ViewModel.UpdateReadyToApply = false;
+        }
     }
 
     private void OnBrowseYtDlp(object sender, RoutedEventArgs e)

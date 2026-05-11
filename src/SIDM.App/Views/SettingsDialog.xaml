@@ -7,7 +7,7 @@
                  xmlns:vm="clr-namespace:SIDM.App.ViewModels"
                  mc:Ignorable="d"
                  Title="Settings"
-                 Height="900"
+                 Height="980"
                  Width="640"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
@@ -154,6 +154,34 @@
 
                 <Border Background="#15FFFFFF" CornerRadius="4" Padding="8,6" Margin="0,8,0,0">
                     <TextBlock Text="{Binding YtDlpStatus}" FontSize="11" Opacity="0.85" TextWrapping="Wrap" />
+                </Border>
+
+                <TextBlock Margin="0,24,0,0" Text="Updates" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
+                           Text="SIDM uses Velopack to install over itself. Point this at the folder or URL where your release nupkgs live." />
+
+                <TextBlock Text="Update feed URL" Margin="0,4,0,4" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox Grid.Column="0" Text="{Binding UpdateFeedUrl, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                                PlaceholderText="https://github.com/owner/SIDM or https://releases.snw.dev/sidm/" />
+                    <ui:Button Grid.Column="1" Margin="8,0,0,0" Content="Check now" Click="OnCheckUpdates" />
+                </Grid>
+
+                <CheckBox Margin="0,12,0,0" Content="Check for updates at startup"
+                          IsChecked="{Binding AutoCheckUpdates, Mode=TwoWay}" />
+
+                <Border Background="#15FFFFFF" CornerRadius="4" Padding="8,6" Margin="0,8,0,0"
+                        Visibility="{Binding UpdateStatus, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}">
+                    <StackPanel>
+                        <TextBlock Text="{Binding UpdateStatus}" FontSize="11" Opacity="0.85" TextWrapping="Wrap" />
+                        <ui:Button Margin="0,8,0,0" Content="Install update and restart" Appearance="Primary"
+                                   Click="OnApplyUpdate"
+                                   Visibility="{Binding UpdateReadyToApply, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}" />
+                    </StackPanel>
                 </Border>
 
                 <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF6B6B" Margin="0,12,0,0"

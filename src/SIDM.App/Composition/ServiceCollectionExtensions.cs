@@ -29,6 +29,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<VideoGrabberSettingsService>();
         services.AddSingleton<SchedulerService>();
         services.AddHostedService(sp => sp.GetRequiredService<SchedulerService>());
+        services.AddSingleton<UpdaterService>();
+        services.AddHostedService<UpdaterStartupCheck>();
 
         // Compose the progress sink so progress goes to BOTH the SQLite writer
         // and the in-memory UI bus. Replace the singleton IDownloadProgressSink
