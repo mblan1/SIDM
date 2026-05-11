@@ -91,6 +91,18 @@ public partial class App : Application
         Log.Information("Starting {App} v{Version}", AppInfo.DisplayName, AppInfo.Version);
         await _host!.StartAsync();
 
+        // Apply the user's theme BEFORE the main window is created so the
+        // first paint is the right color — flipping themes after Show()
+        // produces a brief flash of the wrong theme.
+        try
+        {
+            await _host.Services.GetRequiredService<Services.ThemeService>().LoadAndApplyAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Theme load/apply failed; falling back to compiled-in Dark");
+        }
+
         var mainWindow = _host.Services.GetRequiredService<MainWindow>();
         mainWindow.Show();
     }

@@ -18,6 +18,7 @@ public partial class SettingsDialog : FluentWindow
     private readonly VideoGrabberSettingsService _videoGrabber;
     private readonly UpdaterService _updater;
     private readonly CrashReportingService _crashReporting;
+    private readonly ThemeService _theme;
     private readonly IServiceScopeFactory _scopeFactory;
 
     public SettingsViewModel ViewModel { get; } = new();
@@ -29,6 +30,7 @@ public partial class SettingsDialog : FluentWindow
         VideoGrabberSettingsService videoGrabber,
         UpdaterService updater,
         CrashReportingService crashReporting,
+        ThemeService theme,
         IServiceScopeFactory scopeFactory)
     {
         InitializeComponent();
@@ -38,6 +40,7 @@ public partial class SettingsDialog : FluentWindow
         _videoGrabber = videoGrabber;
         _updater = updater;
         _crashReporting = crashReporting;
+        _theme = theme;
         _scopeFactory = scopeFactory;
         DataContext = ViewModel;
 
@@ -50,6 +53,7 @@ public partial class SettingsDialog : FluentWindow
         ViewModel.AutoCheckUpdates = _updater.AutoCheckOnStartup;
         ViewModel.CrashReportsEnabled = _crashReporting.IsEnabled;
         ViewModel.CrashReportsDsn = _crashReporting.Dsn;
+        ViewModel.ThemeIndex = (int)_theme.Current;
 
         _ = LoadRulesAsync();
         _ = LoadCategoriesAsync();
@@ -109,6 +113,8 @@ public partial class SettingsDialog : FluentWindow
         // value.
         await _crashReporting.SetDsnAsync(ViewModel.CrashReportsDsn);
         await _crashReporting.SetEnabledAsync(ViewModel.CrashReportsEnabled);
+
+        await _theme.SetAsync((AppTheme)ViewModel.ThemeIndex);
 
         DialogResult = true;
         Close();

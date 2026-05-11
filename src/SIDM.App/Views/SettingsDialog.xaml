@@ -27,7 +27,16 @@
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
             <StackPanel>
-                <TextBlock Text="Maximum concurrent downloads" FontWeight="SemiBold" />
+                <TextBlock Text="Appearance" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
+                           Text="Follow Windows or pin Light / Dark." />
+                <ComboBox Width="200" HorizontalAlignment="Left" SelectedIndex="{Binding ThemeIndex, Mode=TwoWay}">
+                    <ComboBoxItem>Follow Windows</ComboBoxItem>
+                    <ComboBoxItem>Light</ComboBoxItem>
+                    <ComboBoxItem>Dark</ComboBoxItem>
+                </ComboBox>
+
+                <TextBlock Margin="0,24,0,0" Text="Maximum concurrent downloads" FontWeight="SemiBold" />
                 <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
                            Text="More downloads finish in parallel; the rest wait in the queue." />
                 <Grid>

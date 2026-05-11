@@ -58,6 +58,10 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string? _crashReportsDsn;
 
+    /// <summary>Theme selection backing field. Bound to a ComboBox.SelectedIndex (System=0, Light=1, Dark=2).</summary>
+    [ObservableProperty]
+    private int _themeIndex;
+
     public ObservableCollection<ScheduleRuleRowViewModel> Rules { get; } = new();
 
     public ObservableCollection<CategoryRowViewModel> Categories { get; } = new();
