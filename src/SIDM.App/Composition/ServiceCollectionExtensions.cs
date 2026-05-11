@@ -31,6 +31,8 @@ public static class ServiceCollectionExtensions
         services.AddHostedService(sp => sp.GetRequiredService<SchedulerService>());
         services.AddSingleton<UpdaterService>();
         services.AddHostedService<UpdaterStartupCheck>();
+        services.AddSingleton<CrashReportingService>();
+        services.AddHostedService<CrashReportingStartup>();
 
         // Compose the progress sink so progress goes to BOTH the SQLite writer
         // and the in-memory UI bus. Replace the singleton IDownloadProgressSink

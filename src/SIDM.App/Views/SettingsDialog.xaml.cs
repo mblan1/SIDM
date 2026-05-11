@@ -17,6 +17,7 @@ public partial class SettingsDialog : FluentWindow
     private readonly SchedulerService _scheduler;
     private readonly VideoGrabberSettingsService _videoGrabber;
     private readonly UpdaterService _updater;
+    private readonly CrashReportingService _crashReporting;
     private readonly IServiceScopeFactory _scopeFactory;
 
     public SettingsViewModel ViewModel { get; } = new();
@@ -27,6 +28,7 @@ public partial class SettingsDialog : FluentWindow
         SchedulerService scheduler,
         VideoGrabberSettingsService videoGrabber,
         UpdaterService updater,
+        CrashReportingService crashReporting,
         IServiceScopeFactory scopeFactory)
     {
         InitializeComponent();
@@ -35,6 +37,7 @@ public partial class SettingsDialog : FluentWindow
         _scheduler = scheduler;
         _videoGrabber = videoGrabber;
         _updater = updater;
+        _crashReporting = crashReporting;
         _scopeFactory = scopeFactory;
         DataContext = ViewModel;
 
@@ -45,6 +48,8 @@ public partial class SettingsDialog : FluentWindow
         ViewModel.YtDlpStatus = BuildResolvedPathStatus();
         ViewModel.UpdateFeedUrl = _updater.FeedUrl;
         ViewModel.AutoCheckUpdates = _updater.AutoCheckOnStartup;
+        ViewModel.CrashReportsEnabled = _crashReporting.IsEnabled;
+        ViewModel.CrashReportsDsn = _crashReporting.Dsn;
 
         _ = LoadRulesAsync();
         _ = LoadCategoriesAsync();
@@ -98,6 +103,12 @@ public partial class SettingsDialog : FluentWindow
         // Persist updater preferences.
         await _updater.SetFeedUrlAsync(ViewModel.UpdateFeedUrl);
         await _updater.SetAutoCheckAsync(ViewModel.AutoCheckUpdates);
+
+        // Persist crash-reporting preferences. Order matters: write the DSN
+        // first so the Start() that follows a flip-to-enabled reads the new
+        // value.
+        await _crashReporting.SetDsnAsync(ViewModel.CrashReportsDsn);
+        await _crashReporting.SetEnabledAsync(ViewModel.CrashReportsEnabled);
 
         DialogResult = true;
         Close();

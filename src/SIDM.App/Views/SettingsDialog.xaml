@@ -7,7 +7,7 @@
                  xmlns:vm="clr-namespace:SIDM.App.ViewModels"
                  mc:Ignorable="d"
                  Title="Settings"
-                 Height="980"
+                 Height="1080"
                  Width="640"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
@@ -183,6 +183,17 @@
                                    Visibility="{Binding UpdateReadyToApply, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}" />
                     </StackPanel>
                 </Border>
+
+                <TextBlock Margin="0,24,0,0" Text="Privacy" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11" TextWrapping="Wrap"
+                           Text="Off by default. When on, anonymized crash reports are sent to Sentry to help us fix bugs faster. URLs, filenames, and cookie strings are redacted before anything leaves your machine." />
+                <CheckBox Content="Send anonymized crash reports" IsChecked="{Binding CrashReportsEnabled, Mode=TwoWay}" />
+
+                <TextBlock Text="Sentry DSN (optional override)" Margin="0,12,0,4" />
+                <ui:TextBox Text="{Binding CrashReportsDsn, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                            PlaceholderText="https://...ingest.sentry.io/..." />
+                <TextBlock Margin="0,4,0,0" FontSize="11" Opacity="0.65"
+                           Text="Leave blank to use the SIDM project DSN once the public org is live." />
 
                 <TextBlock Text="{Binding ErrorMessage}" Foreground="#FF6B6B" Margin="0,12,0,0"
                            Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />

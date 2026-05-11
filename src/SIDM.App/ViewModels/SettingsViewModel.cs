@@ -52,6 +52,12 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _updateReadyToApply;
 
+    [ObservableProperty]
+    private bool _crashReportsEnabled;
+
+    [ObservableProperty]
+    private string? _crashReportsDsn;
+
     public ObservableCollection<ScheduleRuleRowViewModel> Rules { get; } = new();
 
     public ObservableCollection<CategoryRowViewModel> Categories { get; } = new();
