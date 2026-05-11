@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SIDM.VideoGrabber;
+using SIDM.VideoGrabber.Dash;
 using SIDM.VideoGrabber.Hls;
 
 namespace SIDM.App.ViewModels;
@@ -36,7 +37,8 @@ public partial class AddDownloadViewModel : ObservableObject
 
     public bool IsVideoUrl => YouTubeUrlDetector.IsVideoUrl(Url);
     public bool IsHlsUrl => HlsUrlDetector.IsHlsUrl(Url);
-    public bool IsSpecialUrl => IsVideoUrl || IsHlsUrl;
+    public bool IsDashUrl => DashUrlDetector.IsDashUrl(Url);
+    public bool IsSpecialUrl => IsVideoUrl || IsHlsUrl || IsDashUrl;
 
     public string TargetPath => Path.Combine(TargetFolder, string.IsNullOrWhiteSpace(FileName)
         ? GuessFileNameFromUrl(Url)
@@ -58,6 +60,7 @@ public partial class AddDownloadViewModel : ObservableObject
         OnPropertyChanged(nameof(TargetPath));
         OnPropertyChanged(nameof(IsVideoUrl));
         OnPropertyChanged(nameof(IsHlsUrl));
+        OnPropertyChanged(nameof(IsDashUrl));
         OnPropertyChanged(nameof(IsSpecialUrl));
     }
 

@@ -11,6 +11,7 @@ using SIDM.Core.Models;
 using SIDM.Core.Persistence;
 using SIDM.Ipc;
 using SIDM.VideoGrabber;
+using SIDM.VideoGrabber.Dash;
 using SIDM.VideoGrabber.Hls;
 
 namespace SIDM.App.ViewModels;
@@ -239,11 +240,12 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 
         var headers = seed is null ? null : MergeHeaders(seed.Headers, seed.Referer, seed.UserAgent);
 
-        // HLS detection wins over yt-dlp detection: a URL ending in .m3u8 is
-        // always an HLS playlist, even if hosted on a site (e.g. vimeo.com)
-        // that yt-dlp would otherwise claim.
+        // Streaming-manifest URLs always win over yt-dlp detection: a URL
+        // ending in .m3u8 / .mpd is unambiguous even if the host (e.g.
+        // vimeo.com) would otherwise be matched by the yt-dlp router.
         var sourceKind =
-            HlsUrlDetector.IsHlsUrl(vm.Url) ? SourceKind.Hls
+            DashUrlDetector.IsDashUrl(vm.Url) ? SourceKind.Dash
+            : HlsUrlDetector.IsHlsUrl(vm.Url) ? SourceKind.Hls
             : YouTubeUrlDetector.IsVideoUrl(vm.Url) ? SourceKind.YouTube
             : SourceKind.Direct;
 

@@ -6,6 +6,7 @@ using SIDM.Core.Engine;
 using SIDM.Core.Models;
 using SIDM.Core.Persistence;
 using SIDM.VideoGrabber;
+using SIDM.VideoGrabber.Dash;
 using SIDM.VideoGrabber.Ffmpeg;
 using SIDM.VideoGrabber.Hls;
 
@@ -21,6 +22,7 @@ public sealed class DownloadEngine
     private readonly DownloadOrchestrator _orchestrator;
     private readonly IYtDlpRunner _ytDlpRunner;
     private readonly HlsDownloader _hlsDownloader;
+    private readonly DashDownloader _dashDownloader;
     private readonly FfmpegRemuxer _ffmpegRemuxer;
     private readonly VideoGrabberSettingsService _videoGrabberSettings;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -41,6 +43,7 @@ public sealed class DownloadEngine
         DownloadOrchestrator orchestrator,
         IYtDlpRunner ytDlpRunner,
         HlsDownloader hlsDownloader,
+        DashDownloader dashDownloader,
         FfmpegRemuxer ffmpegRemuxer,
         VideoGrabberSettingsService videoGrabberSettings,
         IServiceScopeFactory scopeFactory,
@@ -50,6 +53,7 @@ public sealed class DownloadEngine
         _orchestrator = orchestrator;
         _ytDlpRunner = ytDlpRunner;
         _hlsDownloader = hlsDownloader;
+        _dashDownloader = dashDownloader;
         _ffmpegRemuxer = ffmpegRemuxer;
         _videoGrabberSettings = videoGrabberSettings;
         _scopeFactory = scopeFactory;
@@ -120,6 +124,11 @@ public sealed class DownloadEngine
         if (download.SourceKind == SourceKind.Hls)
         {
             await RunHlsAsync(repo, download, cts);
+            return;
+        }
+        if (download.SourceKind == SourceKind.Dash)
+        {
+            await RunDashAsync(repo, download, cts);
             return;
         }
 
@@ -375,6 +384,84 @@ public sealed class DownloadEngine
 
             download.TargetPath = finalPath;
             download.FileName = Path.GetFileName(finalPath);
+        }
+        else
+        {
+            download.Status = DownloadStatus.Failed;
+            download.ErrorMessage = result.FailureMessage;
+        }
+
+        await repo.UpdateAsync(download);
+        CleanupActive(download.Id, cts);
+        RaiseFinished(download.Id, download.Status);
+    }
+
+    /// <summary>
+    /// DASH run path. Same single-segment-row trick as HLS — the engine has no
+    /// stable byte-range concept for DASH segments, so progress maps to one
+    /// synthetic segment so the existing progress dialog renders normally.
+    /// </summary>
+    private async Task RunDashAsync(IDownloadRepository repo, Download download, CancellationTokenSource cts)
+    {
+        var targetPath = Path.ChangeExtension(download.TargetPath, ".mp4");
+
+        var sink = new ScopedSegmentProgressSink(download.Id, _progressSink);
+        long lastBytes = 0;
+        var progress = new Progress<DashDownloadProgress>(sample =>
+        {
+            sink.Report(0, sample.BytesWritten);
+            lastBytes = sample.BytesWritten;
+        });
+
+        DashDownloadResult result;
+        try
+        {
+            result = await _dashDownloader.DownloadAsync(
+                new DashDownloadRequest(new Uri(download.Url), targetPath, _videoGrabberSettings.ResolveFfmpeg(), ParallelSegmentDownloads: 4),
+                progress,
+                cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DASH run crashed for {Id}", download.Id);
+            await UpdateStatusAsync(repo, download, DownloadStatus.Failed, ex.Message);
+            CleanupActive(download.Id, cts);
+            RaiseFinished(download.Id, DownloadStatus.Failed);
+            return;
+        }
+
+        if (result.TotalBytes > 0)
+        {
+            await repo.ReplaceSegmentsAsync(download.Id, new[]
+            {
+                new Segment
+                {
+                    Idx = 0,
+                    StartByte = 0,
+                    EndByte = result.TotalBytes - 1,
+                    BytesDownloaded = lastBytes,
+                    Status = result.Success ? SegmentStatus.Completed : SegmentStatus.Pending,
+                },
+            });
+        }
+
+        if (cts.IsCancellationRequested)
+        {
+            download.Status = DownloadStatus.Paused;
+        }
+        else if (result.Success)
+        {
+            download.Status = DownloadStatus.Completed;
+            download.CompletedUtc = DateTimeOffset.UtcNow;
+            download.TotalBytes = result.TotalBytes;
+            // result.FailureMessage may carry an informational note even on
+            // success (e.g. "ffmpeg not configured — kept tracks separate").
+            download.ErrorMessage = result.FailureMessage;
+            if (!string.IsNullOrWhiteSpace(result.FinalFilePath))
+            {
+                download.TargetPath = result.FinalFilePath!;
+                download.FileName = Path.GetFileName(result.FinalFilePath!);
+            }
         }
         else
         {

@@ -84,6 +84,18 @@
                 </Border>
             </StackPanel>
 
+            <StackPanel Margin="0,16,0,0"
+                        Visibility="{Binding IsDashUrl, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Border Background="#22008B6E" CornerRadius="4" Padding="8,6">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Stream24" Margin="0,0,8,0" />
+                        <TextBlock VerticalAlignment="Center" FontSize="12">
+                            <Run Text="DASH manifest detected — video + audio tracks will be fetched and muxed to .mp4 (ffmpeg required for muxing)." />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
             <StackPanel Visibility="{Binding IsSpecialUrl, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=invert}">
                 <TextBlock Text="Segments (parallel connections)" Margin="0,16,0,4" />
                 <Grid>

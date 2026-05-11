@@ -136,6 +136,100 @@ public sealed class FfmpegRemuxer
         return new FfmpegRemuxResult(RemuxOutcome.Succeeded, outputPath, null);
     }
 
+    /// <summary>
+    /// Fuses a video-only MP4 (<paramref name="videoPath"/>) and an audio-only
+    /// MP4 (<paramref name="audioPath"/>) into a single MP4 at
+    /// <paramref name="outputPath"/> using <c>ffmpeg -c copy</c>. Used by the
+    /// DASH downloader after the two tracks have been fetched separately.
+    /// </summary>
+    public async Task<FfmpegRemuxResult> MuxVideoAudioAsync(
+        string videoPath,
+        string audioPath,
+        string outputPath,
+        string? ffmpegPath,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ffmpegPath) || !File.Exists(ffmpegPath))
+        {
+            return new FfmpegRemuxResult(RemuxOutcome.NotConfigured, null, null);
+        }
+        if (File.Exists(outputPath))
+        {
+            try { File.Delete(outputPath); } catch { }
+        }
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffmpegPath,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("-hide_banner");
+        psi.ArgumentList.Add("-nostdin");
+        psi.ArgumentList.Add("-y");
+        psi.ArgumentList.Add("-i");
+        psi.ArgumentList.Add(videoPath);
+        psi.ArgumentList.Add("-i");
+        psi.ArgumentList.Add(audioPath);
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("copy");
+        // Map exactly one video stream from input 0 and one audio stream from input 1.
+        psi.ArgumentList.Add("-map");
+        psi.ArgumentList.Add("0:v:0");
+        psi.ArgumentList.Add("-map");
+        psi.ArgumentList.Add("1:a:0");
+        psi.ArgumentList.Add(outputPath);
+
+        _logger.LogInformation("ffmpeg mux: {Video} + {Audio} → {Output}", videoPath, audioPath, outputPath);
+
+        string? lastStderr = null;
+        using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data)) lastStderr = e.Data;
+        };
+
+        try
+        {
+            if (!process.Start())
+                return new FfmpegRemuxResult(RemuxOutcome.Failed, null, "ffmpeg failed to start");
+        }
+        catch (Exception ex)
+        {
+            return new FfmpegRemuxResult(RemuxOutcome.Failed, null, $"ffmpeg failed to start: {ex.Message}");
+        }
+
+        process.BeginErrorReadLine();
+        _ = Task.Run(async () =>
+        {
+            try { await process.StandardOutput.ReadToEndAsync(cancellationToken); }
+            catch { }
+        }, cancellationToken);
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+            TryDelete(outputPath);
+            return new FfmpegRemuxResult(RemuxOutcome.Failed, null, "Canceled");
+        }
+
+        process.WaitForExit();
+
+        if (process.ExitCode != 0)
+        {
+            TryDelete(outputPath);
+            return new FfmpegRemuxResult(RemuxOutcome.Failed, null,
+                lastStderr ?? $"ffmpeg exited with code {process.ExitCode}");
+        }
+        return new FfmpegRemuxResult(RemuxOutcome.Succeeded, outputPath, null);
+    }
+
     private static void TryDelete(string path)
     {
         try { if (File.Exists(path)) File.Delete(path); } catch { }
