@@ -6,6 +6,7 @@ using SIDM.Core.Engine;
 using SIDM.Core.Models;
 using SIDM.Core.Persistence;
 using SIDM.VideoGrabber;
+using SIDM.VideoGrabber.Hls;
 
 namespace SIDM.App.Services;
 
@@ -18,6 +19,7 @@ public sealed class DownloadEngine
 {
     private readonly DownloadOrchestrator _orchestrator;
     private readonly IYtDlpRunner _ytDlpRunner;
+    private readonly HlsDownloader _hlsDownloader;
     private readonly VideoGrabberSettingsService _videoGrabberSettings;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IDownloadProgressSink _progressSink;
@@ -36,6 +38,7 @@ public sealed class DownloadEngine
     public DownloadEngine(
         DownloadOrchestrator orchestrator,
         IYtDlpRunner ytDlpRunner,
+        HlsDownloader hlsDownloader,
         VideoGrabberSettingsService videoGrabberSettings,
         IServiceScopeFactory scopeFactory,
         IDownloadProgressSink progressSink,
@@ -43,6 +46,7 @@ public sealed class DownloadEngine
     {
         _orchestrator = orchestrator;
         _ytDlpRunner = ytDlpRunner;
+        _hlsDownloader = hlsDownloader;
         _videoGrabberSettings = videoGrabberSettings;
         _scopeFactory = scopeFactory;
         _progressSink = progressSink;
@@ -102,10 +106,16 @@ public sealed class DownloadEngine
         await repo.UpdateAsync(download, CancellationToken.None);
 
         // Route by source: video sites go through yt-dlp instead of the HTTP
-        // segment orchestrator.
+        // segment orchestrator; .m3u8 playlists go through the pure-C# HLS
+        // downloader.
         if (download.SourceKind == SourceKind.YouTube)
         {
             await RunYouTubeAsync(repo, download, cts);
+            return;
+        }
+        if (download.SourceKind == SourceKind.Hls)
+        {
+            await RunHlsAsync(repo, download, cts);
             return;
         }
 
@@ -250,6 +260,95 @@ public sealed class DownloadEngine
             download.Status = DownloadStatus.Completed;
             download.CompletedUtc = DateTimeOffset.UtcNow;
             download.TotalBytes = lastReportedBytes > 0 ? lastReportedBytes : download.TotalBytes;
+            download.ErrorMessage = null;
+            if (!string.IsNullOrWhiteSpace(result.FinalFilePath))
+            {
+                download.TargetPath = result.FinalFilePath!;
+                download.FileName = Path.GetFileName(result.FinalFilePath!);
+            }
+        }
+        else
+        {
+            download.Status = DownloadStatus.Failed;
+            download.ErrorMessage = result.FailureMessage;
+        }
+
+        await repo.UpdateAsync(download);
+        CleanupActive(download.Id, cts);
+        RaiseFinished(download.Id, download.Status);
+    }
+
+    /// <summary>
+    /// HLS run path. Reuses the existing ScopedSegmentProgressSink with a
+    /// synthetic single-segment row (Idx=0), so the progress dialog and
+    /// row VM render exactly as they do for plain HTTP downloads.
+    /// </summary>
+    private async Task RunHlsAsync(IDownloadRepository repo, Download download, CancellationTokenSource cts)
+    {
+        // Ensure the output path has a .ts extension — HLS segments are
+        // MPEG-TS, and most users won't think to add the suffix themselves.
+        var targetPath = download.TargetPath;
+        if (!Path.HasExtension(targetPath) ||
+            !targetPath.EndsWith(".ts", StringComparison.OrdinalIgnoreCase))
+        {
+            targetPath = Path.ChangeExtension(targetPath, ".ts");
+        }
+
+        var sink = new ScopedSegmentProgressSink(download.Id, _progressSink);
+        long observedTotalBytes = 0;
+        var lastBytes = 0L;
+
+        var progress = new Progress<HlsDownloadProgress>(sample =>
+        {
+            sink.Report(0, sample.BytesWritten);
+            lastBytes = sample.BytesWritten;
+            if (sample.BytesWritten > observedTotalBytes) observedTotalBytes = sample.BytesWritten;
+        });
+
+        HlsDownloadResult result;
+        try
+        {
+            result = await _hlsDownloader.DownloadAsync(
+                new HlsDownloadRequest(new Uri(download.Url), targetPath, ParallelSegmentDownloads: 4),
+                progress,
+                cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "HLS run crashed for {Id}", download.Id);
+            await UpdateStatusAsync(repo, download, DownloadStatus.Failed, ex.Message);
+            CleanupActive(download.Id, cts);
+            RaiseFinished(download.Id, DownloadStatus.Failed);
+            return;
+        }
+
+        // Persist a synthetic single-segment row so the UI's progress display
+        // has something coherent to render (HLS doesn't expose byte ranges).
+        var totalForRow = result.TotalBytes > 0 ? result.TotalBytes : observedTotalBytes;
+        if (totalForRow > 0)
+        {
+            await repo.ReplaceSegmentsAsync(download.Id, new[]
+            {
+                new Segment
+                {
+                    Idx = 0,
+                    StartByte = 0,
+                    EndByte = totalForRow - 1,
+                    BytesDownloaded = lastBytes,
+                    Status = result.Success ? SegmentStatus.Completed : SegmentStatus.Pending,
+                },
+            });
+        }
+
+        if (cts.IsCancellationRequested)
+        {
+            download.Status = DownloadStatus.Paused;
+        }
+        else if (result.Success)
+        {
+            download.Status = DownloadStatus.Completed;
+            download.CompletedUtc = DateTimeOffset.UtcNow;
+            download.TotalBytes = result.TotalBytes;
             download.ErrorMessage = null;
             if (!string.IsNullOrWhiteSpace(result.FinalFilePath))
             {

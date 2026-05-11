@@ -11,6 +11,7 @@ using SIDM.Core.Models;
 using SIDM.Core.Persistence;
 using SIDM.Ipc;
 using SIDM.VideoGrabber;
+using SIDM.VideoGrabber.Hls;
 
 namespace SIDM.App.ViewModels;
 
@@ -238,7 +239,13 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 
         var headers = seed is null ? null : MergeHeaders(seed.Headers, seed.Referer, seed.UserAgent);
 
-        var isVideo = YouTubeUrlDetector.IsVideoUrl(vm.Url);
+        // HLS detection wins over yt-dlp detection: a URL ending in .m3u8 is
+        // always an HLS playlist, even if hosted on a site (e.g. vimeo.com)
+        // that yt-dlp would otherwise claim.
+        var sourceKind =
+            HlsUrlDetector.IsHlsUrl(vm.Url) ? SourceKind.Hls
+            : YouTubeUrlDetector.IsVideoUrl(vm.Url) ? SourceKind.YouTube
+            : SourceKind.Direct;
 
         var download = new Download
         {
@@ -251,7 +258,7 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             Mime = vm.Mime ?? seed?.Mime,
             TotalBytes = vm.ExpectedLength ?? seed?.ExpectedLength,
             CategoryId = await TryGetCategoryIdAsync(fileName),
-            SourceKind = isVideo ? SourceKind.YouTube : SourceKind.Direct,
+            SourceKind = sourceKind,
             HeadersJson = headers is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(headers) : null,
             CookiesJson = seed?.Cookies is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(seed.Cookies) : null,
         };

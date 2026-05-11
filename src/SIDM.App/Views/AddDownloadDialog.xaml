@@ -72,7 +72,19 @@
                 </Border>
             </StackPanel>
 
-            <StackPanel Visibility="{Binding IsVideoUrl, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=invert}">
+            <StackPanel Margin="0,16,0,0"
+                        Visibility="{Binding IsHlsUrl, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Border Background="#2200B8D4" CornerRadius="4" Padding="8,6">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Stream24" Margin="0,0,8,0" />
+                        <TextBlock VerticalAlignment="Center" FontSize="12">
+                            <Run Text="HLS playlist detected — segments will be fetched in parallel and concatenated to .ts." />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Visibility="{Binding IsSpecialUrl, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=invert}">
                 <TextBlock Text="Segments (parallel connections)" Margin="0,16,0,4" />
                 <Grid>
                     <Grid.ColumnDefinitions>
