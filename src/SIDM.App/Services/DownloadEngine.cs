@@ -6,6 +6,7 @@ using SIDM.Core.Engine;
 using SIDM.Core.Models;
 using SIDM.Core.Persistence;
 using SIDM.VideoGrabber;
+using SIDM.VideoGrabber.Ffmpeg;
 using SIDM.VideoGrabber.Hls;
 
 namespace SIDM.App.Services;
@@ -20,6 +21,7 @@ public sealed class DownloadEngine
     private readonly DownloadOrchestrator _orchestrator;
     private readonly IYtDlpRunner _ytDlpRunner;
     private readonly HlsDownloader _hlsDownloader;
+    private readonly FfmpegRemuxer _ffmpegRemuxer;
     private readonly VideoGrabberSettingsService _videoGrabberSettings;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IDownloadProgressSink _progressSink;
@@ -39,6 +41,7 @@ public sealed class DownloadEngine
         DownloadOrchestrator orchestrator,
         IYtDlpRunner ytDlpRunner,
         HlsDownloader hlsDownloader,
+        FfmpegRemuxer ffmpegRemuxer,
         VideoGrabberSettingsService videoGrabberSettings,
         IServiceScopeFactory scopeFactory,
         IDownloadProgressSink progressSink,
@@ -47,6 +50,7 @@ public sealed class DownloadEngine
         _orchestrator = orchestrator;
         _ytDlpRunner = ytDlpRunner;
         _hlsDownloader = hlsDownloader;
+        _ffmpegRemuxer = ffmpegRemuxer;
         _videoGrabberSettings = videoGrabberSettings;
         _scopeFactory = scopeFactory;
         _progressSink = progressSink;
@@ -350,11 +354,27 @@ public sealed class DownloadEngine
             download.CompletedUtc = DateTimeOffset.UtcNow;
             download.TotalBytes = result.TotalBytes;
             download.ErrorMessage = null;
-            if (!string.IsNullOrWhiteSpace(result.FinalFilePath))
+            var finalPath = result.FinalFilePath ?? targetPath;
+
+            // Best-effort remux to MP4. If ffmpeg isn't configured, the .ts
+            // file stays in place — both formats are playable, and we surface
+            // the actual file path the user gets on disk.
+            var ffmpegPath = _videoGrabberSettings.ResolveFfmpeg();
+            var remux = await _ffmpegRemuxer.RemuxToMp4Async(finalPath, ffmpegPath, cts.Token);
+            if (remux.Outcome == RemuxOutcome.Succeeded && !string.IsNullOrWhiteSpace(remux.OutputPath))
             {
-                download.TargetPath = result.FinalFilePath!;
-                download.FileName = Path.GetFileName(result.FinalFilePath!);
+                finalPath = remux.OutputPath!;
+                _logger.LogInformation("HLS download {Id} remuxed to {Path}", download.Id, finalPath);
             }
+            else if (remux.Outcome == RemuxOutcome.Failed)
+            {
+                // Keep the .ts and the Completed status — partial value is
+                // still useful. Log so the user can see why mux didn't happen.
+                _logger.LogWarning("HLS remux failed for {Id}: {Reason}", download.Id, remux.FailureMessage);
+            }
+
+            download.TargetPath = finalPath;
+            download.FileName = Path.GetFileName(finalPath);
         }
         else
         {
