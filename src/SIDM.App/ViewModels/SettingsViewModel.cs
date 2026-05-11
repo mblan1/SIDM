@@ -28,7 +28,12 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private ScheduleRuleRowViewModel? _selectedRule;
 
+    [ObservableProperty]
+    private CategoryRowViewModel? _selectedCategory;
+
     public ObservableCollection<ScheduleRuleRowViewModel> Rules { get; } = new();
+
+    public ObservableCollection<CategoryRowViewModel> Categories { get; } = new();
 
     public string BandwidthDisplay => BandwidthKiBPerSec <= 0
         ? "Unlimited"
@@ -101,4 +106,29 @@ public partial class ScheduleRuleRowViewModel : ObservableObject
         if (bandwidthKiBps > 0) parts.Add($"{bandwidthKiBps} KiB/s");
         return parts.Count == 0 ? "no override" : string.Join(", ", parts);
     }
+}
+
+/// <summary>One row in the categories list. Wraps a <see cref="Category"/> for display.</summary>
+public partial class CategoryRowViewModel : ObservableObject
+{
+    private readonly Category _model;
+
+    public CategoryRowViewModel(Category model)
+    {
+        _model = model;
+    }
+
+    public long Id => _model.Id;
+    public string Name => _model.Name;
+    public string Extensions => _model.Extensions ?? "";
+    public string DefaultPath => _model.DefaultPath ?? "";
+
+    public Category ToCategory() => new()
+    {
+        Id = _model.Id,
+        Name = _model.Name,
+        Extensions = _model.Extensions,
+        DefaultPath = _model.DefaultPath,
+        Color = _model.Color,
+    };
 }

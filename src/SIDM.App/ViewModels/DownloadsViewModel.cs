@@ -197,12 +197,19 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             dialog.ViewModel.ExpectedLength = seed.ExpectedLength;
             dialog.ViewModel.Mime = seed.Mime;
 
-            // Pre-fill the folder: remembered-for-this-extension wins over the
-            // browser's suggested folder, which wins over the default.
+            // Pre-fill the folder: priority is
+            //   1) explicitly-remembered folder for this extension (user's history),
+            //   2) category default path for this extension,
+            //   3) browser-suggested folder,
+            //   4) the AddDownloadViewModel default (~\Downloads).
             var rememberedFolder = await TryGetRememberedFolderAsync(dialog.ViewModel.Extension);
             if (!string.IsNullOrWhiteSpace(rememberedFolder))
             {
                 dialog.ViewModel.TargetFolder = rememberedFolder!;
+            }
+            else if (await TryGetCategoryFolderAsync(dialog.ViewModel.FileName) is { } catFolder)
+            {
+                dialog.ViewModel.TargetFolder = catFolder;
             }
             else if (!string.IsNullOrWhiteSpace(seed.SuggestedFolder))
             {
@@ -240,6 +247,7 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             CreatedUtc = DateTimeOffset.UtcNow,
             Mime = vm.Mime ?? seed?.Mime,
             TotalBytes = vm.ExpectedLength ?? seed?.ExpectedLength,
+            CategoryId = await TryGetCategoryIdAsync(fileName),
             HeadersJson = headers is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(headers) : null,
             CookiesJson = seed?.Cookies is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(seed.Cookies) : null,
         };
@@ -372,6 +380,50 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to read remembered folder for .{Ext}", extension);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Returns the default save folder for the category claiming this file's
+    /// extension, or null if no category matches (or the category has no
+    /// default path).
+    /// </summary>
+    private async Task<string?> TryGetCategoryFolderAsync(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return null;
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
+            var all = await repo.GetAllAsync();
+            var match = SIDM.Core.Scheduling.CategoryMatcher.Match(all, fileName);
+            return string.IsNullOrWhiteSpace(match?.DefaultPath) ? null : match.DefaultPath;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to resolve category folder for {FileName}", fileName);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Returns the matching category's id, or null. Called when persisting a
+    /// new download so the row carries the category link for UI badges later.
+    /// </summary>
+    private async Task<long?> TryGetCategoryIdAsync(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return null;
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
+            var all = await repo.GetAllAsync();
+            return SIDM.Core.Scheduling.CategoryMatcher.Match(all, fileName)?.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to resolve category id for {FileName}", fileName);
             return null;
         }
     }

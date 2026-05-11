@@ -33,6 +33,7 @@ public partial class SettingsDialog : FluentWindow
         ViewModel.SetFromBytes(_bandwidth.CurrentBytesPerSecond);
 
         _ = LoadRulesAsync();
+        _ = LoadCategoriesAsync();
     }
 
     private void OnCancel(object sender, RoutedEventArgs e)
@@ -129,5 +130,63 @@ public partial class SettingsDialog : FluentWindow
         var dlg = new ScheduleRuleEditorDialog { Owner = this };
         if (seed is not null) dlg.LoadFrom(seed);
         return dlg.ShowDialog() == true ? dlg.ToRule() : null;
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
+            var cats = await repo.GetAllAsync();
+            ViewModel.Categories.Clear();
+            foreach (var c in cats) ViewModel.Categories.Add(new CategoryRowViewModel(c));
+        }
+        catch (Exception ex)
+        {
+            ViewModel.ErrorMessage = $"Failed to load categories: {ex.Message}";
+        }
+    }
+
+    private async void OnAddCategory(object sender, RoutedEventArgs e)
+    {
+        var cat = ShowCategoryEditor(seed: null);
+        if (cat is null) return;
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
+        await repo.AddAsync(cat);
+        await LoadCategoriesAsync();
+    }
+
+    private async void OnEditCategory(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedCategory is null) return;
+        var existing = ViewModel.SelectedCategory.ToCategory();
+        var edited = ShowCategoryEditor(seed: existing);
+        if (edited is null) return;
+
+        edited.Id = existing.Id;
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
+        await repo.UpdateAsync(edited);
+        await LoadCategoriesAsync();
+    }
+
+    private async void OnDeleteCategory(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedCategory is null) return;
+        var id = ViewModel.SelectedCategory.Id;
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
+        await repo.RemoveAsync(id);
+        await LoadCategoriesAsync();
+    }
+
+    private SIDM.Core.Models.Category? ShowCategoryEditor(SIDM.Core.Models.Category? seed)
+    {
+        var dlg = new CategoryEditorDialog { Owner = this };
+        if (seed is not null) dlg.LoadFrom(seed);
+        return dlg.ShowDialog() == true ? dlg.ToCategory() : null;
     }
 }
