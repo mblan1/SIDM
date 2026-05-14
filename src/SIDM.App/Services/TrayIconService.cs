@@ -17,12 +17,14 @@ namespace SIDM.App.Services;
 public sealed class TrayIconService : IDisposable
 {
     private readonly CloseBehaviorService _closeBehavior;
+    private readonly UpdaterService _updater;
     private WinForms.NotifyIcon? _notifyIcon;
     private Window? _mainWindow;
 
-    public TrayIconService(CloseBehaviorService closeBehavior)
+    public TrayIconService(CloseBehaviorService closeBehavior, UpdaterService updater)
     {
         _closeBehavior = closeBehavior;
+        _updater = updater;
     }
 
     public void Initialize(Window mainWindow)
@@ -44,6 +46,32 @@ public sealed class TrayIconService : IDisposable
         _notifyIcon.ContextMenuStrip = menu;
 
         _notifyIcon.DoubleClick += (_, _) => RestoreMainWindow();
+
+        // Update notifications — balloon tip when the updater reports a new
+        // version. Click the balloon to bring up the main window so the user
+        // can hit "Install update and restart" from Settings.
+        _notifyIcon.BalloonTipClicked += (_, _) => RestoreMainWindow();
+        _updater.UpdateAvailable += OnUpdateAvailable;
+        // The startup check may have completed BEFORE the tray was wired up
+        // (UpdaterStartupCheck runs as IHostedService before MainWindow shows).
+        // Replay the last result if it was UpdateAvailable.
+        if (_updater.LastResult is { State: UpdateCheckState.UpdateAvailable } pending)
+        {
+            OnUpdateAvailable(pending);
+        }
+    }
+
+    private void OnUpdateAvailable(UpdateCheckResult result)
+    {
+        if (_notifyIcon is null) return;
+        _notifyIcon.BalloonTipTitle = "SIDM update available";
+        _notifyIcon.BalloonTipText = result.AvailableVersion is { } v
+            ? $"Version {v} is ready to install. Click to open SIDM."
+            : "A new version is ready to install. Click to open SIDM.";
+        _notifyIcon.BalloonTipIcon = WinForms.ToolTipIcon.Info;
+        // 10s is the Windows default; some shells ignore custom durations
+        // anyway. Long enough to notice without nagging.
+        _notifyIcon.ShowBalloonTip(10_000);
     }
 
     /// <summary>
@@ -125,6 +153,7 @@ public sealed class TrayIconService : IDisposable
 
     public void Dispose()
     {
+        _updater.UpdateAvailable -= OnUpdateAvailable;
         if (_notifyIcon is not null)
         {
             _notifyIcon.Visible = false;

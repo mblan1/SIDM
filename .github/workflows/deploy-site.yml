@@ -1,0 +1,50 @@
+# Publishes docs/landing/ to GitHub Pages on every push to main.
+#
+# One-time setup in the repo:
+#   Settings → Pages → Build and deployment → Source: "GitHub Actions"
+#
+# The site will then be available at https://<user>.github.io/<repo>/
+# (or your custom domain if you set a CNAME in docs/landing/).
+name: Deploy landing page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/landing/**'
+      - '.github/workflows/deploy-site.yml'
+  workflow_dispatch:
+
+# GitHub Pages requires these scopes — read the repo, deploy to the Pages env,
+# and write the OIDC id-token used by the deploy action.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time; later runs win.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload static site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/landing
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

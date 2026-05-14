@@ -69,7 +69,26 @@ public sealed class UpdaterService
     }
 
     public string? FeedUrl { get; private set; }
-    public bool AutoCheckOnStartup { get; private set; }
+
+    /// <summary>
+    /// True iff the startup hosted service should run a check. Defaults to
+    /// <c>true</c> on first run (no persisted value yet) so brand-new installs
+    /// get auto-updates out of the box; the user can opt out from Settings.
+    /// </summary>
+    public bool AutoCheckOnStartup { get; private set; } = true;
+
+    /// <summary>
+    /// Most recent result, or null if no check has run yet. Read by the tray
+    /// when it initializes so a startup-time update notification still fires
+    /// if the check completed before the tray was wired up.
+    /// </summary>
+    public UpdateCheckResult? LastResult { get; private set; }
+
+    /// <summary>
+    /// Fires when a check finishes with <see cref="UpdateCheckState.UpdateAvailable"/>.
+    /// The tray subscribes to show a balloon notification.
+    /// </summary>
+    public event Action<UpdateCheckResult>? UpdateAvailable;
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -78,7 +97,20 @@ public sealed class UpdaterService
             await using var scope = _scopeFactory.CreateAsyncScope();
             var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
             FeedUrl = await settings.GetAsync<string>(FeedUrlSettingKey, cancellationToken);
-            AutoCheckOnStartup = await settings.GetAsync<bool>(AutoCheckSettingKey, cancellationToken);
+
+            // Detect first-run separately from persisted=false so we can default
+            // to enabled. ISettingsRepository.GetAsync<bool> returns default(bool)
+            // = false for a missing key, indistinguishable from an explicit
+            // user-set false; GetAllRawAsync gives us key presence.
+            var raw = await settings.GetAllRawAsync(cancellationToken);
+            if (raw.TryGetValue(AutoCheckSettingKey, out var persisted))
+            {
+                AutoCheckOnStartup = bool.TryParse(persisted, out var b) && b;
+            }
+            else
+            {
+                AutoCheckOnStartup = true;
+            }
         }
         catch (Exception ex)
         {
@@ -110,6 +142,18 @@ public sealed class UpdaterService
     /// call to <see cref="ApplyPendingAndRestartAsync"/>).
     /// </summary>
     public async Task<UpdateCheckResult> CheckAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await CheckCoreAsync(cancellationToken).ConfigureAwait(false);
+        LastResult = result;
+        if (result.State == UpdateCheckState.UpdateAvailable)
+        {
+            try { UpdateAvailable?.Invoke(result); }
+            catch (Exception ex) { _logger.LogDebug(ex, "UpdateAvailable handler threw"); }
+        }
+        return result;
+    }
+
+    private async Task<UpdateCheckResult> CheckCoreAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(FeedUrl))
         {

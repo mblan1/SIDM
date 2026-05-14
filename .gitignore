@@ -81,3 +81,6 @@ src/SIDM.Extension.Firefox/node_modules/
 ## Vendored sidecars (download at pack time, do not commit binaries)
 tools/yt-dlp.exe
 tools/ffmpeg.exe
+
+# Netlify CLI local state
+.netlify/

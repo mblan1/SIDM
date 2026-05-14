@@ -1,0 +1,28 @@
+# Netlify configuration for the SIDM landing page.
+#
+# The landing page is a static HTML/CSS bundle in docs/landing/. No build
+# step is needed — Netlify just uploads that folder as the publish root.
+#
+# Site: https://snw-sidm.netlify.app  (siteId 7cbb9f92-1a42-4d77-96a3-8116ee85e613)
+
+[build]
+  publish = "docs/landing"
+  # No build command — pure static assets.
+  command = ""
+
+# Cache the static assets aggressively, but never the HTML itself so the
+# Download button can swap targets without users hitting a stale cache.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/sidm-logo.png"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/styles.css"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
