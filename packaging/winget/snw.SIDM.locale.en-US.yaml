@@ -9,7 +9,7 @@ PackageLocale: en-US
 
 Publisher: snw.dev
 PublisherUrl: https://snw.dev
-PublisherSupportUrl: https://github.com/snw-dev/SIDM/issues
+PublisherSupportUrl: https://github.com/mblan1/SIDM/issues
 PrivacyUrl: https://snw.dev/sidm/privacy
 
 Author: lanle
@@ -47,7 +47,7 @@ ReleaseNotes: |-
   - Velopack auto-updates from GitHub Releases
   - Opt-in Sentry crash reporting with URL / cookie / filename scrubbing
 
-ReleaseNotesUrl: https://github.com/snw-dev/SIDM/releases/tag/v0.1.0
+ReleaseNotesUrl: https://github.com/mblan1/SIDM/releases/tag/v0.1.0
 
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

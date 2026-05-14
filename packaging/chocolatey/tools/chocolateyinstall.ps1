@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $packageArgs = @{
     packageName    = 'sidm'
     fileType       = 'EXE'
-    url64bit       = 'https://github.com/snw-dev/SIDM/releases/download/v0.1.0/SIDM-Setup.exe'
+    url64bit       = 'https://github.com/mblan1/SIDM/releases/download/v0.1.0/SIDM-Setup.exe'
     checksum64     = 'REPLACE_WITH_SHA256_OF_SETUP_EXE'
     checksumType64 = 'sha256'
 

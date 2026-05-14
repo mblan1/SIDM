@@ -12,16 +12,16 @@
   <metadata>
     <id>sidm</id>
     <version>0.1.0</version>
-    <packageSourceUrl>https://github.com/snw-dev/SIDM/tree/main/packaging/chocolatey</packageSourceUrl>
+    <packageSourceUrl>https://github.com/mblan1/SIDM/tree/main/packaging/chocolatey</packageSourceUrl>
     <owners>snw.dev</owners>
 
     <title>Snw Internet Download Manager (SIDM)</title>
     <authors>lanle, snw.dev</authors>
     <projectUrl>https://snw.dev/sidm</projectUrl>
-    <projectSourceUrl>https://github.com/snw-dev/SIDM</projectSourceUrl>
+    <projectSourceUrl>https://github.com/mblan1/SIDM</projectSourceUrl>
     <iconUrl>https://snw.dev/sidm/icon.png</iconUrl>
-    <bugTrackerUrl>https://github.com/snw-dev/SIDM/issues</bugTrackerUrl>
-    <docsUrl>https://github.com/snw-dev/SIDM/blob/main/README.md</docsUrl>
+    <bugTrackerUrl>https://github.com/mblan1/SIDM/issues</bugTrackerUrl>
+    <docsUrl>https://github.com/mblan1/SIDM/blob/main/README.md</docsUrl>
     <licenseUrl>https://snw.dev/sidm/license</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
 
@@ -41,7 +41,7 @@ SIDM (Snw Internet Download Manager) brings IDM's headline value to modern Windo
 
 **Requires:** Windows 10/11. yt-dlp + ffmpeg are optional but recommended for video features.
 ]]></description>
-    <releaseNotes>https://github.com/snw-dev/SIDM/releases/tag/v0.1.0</releaseNotes>
+    <releaseNotes>https://github.com/mblan1/SIDM/releases/tag/v0.1.0</releaseNotes>
   </metadata>
   <files>
     <file src="tools\**" target="tools" />

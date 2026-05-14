@@ -92,7 +92,7 @@ push to `main`.
 3. In **Settings → Pages**, set the custom domain and enable HTTPS.
 
 The download button on the landing page already points at
-`https://github.com/snw-dev/SIDM/releases/latest`. Replace `snw-dev/SIDM` in
+`https://github.com/mblan1/SIDM/releases/latest`. Replace `mblan1/SIDM` in
 `docs/landing/index.html` with your actual GitHub `owner/repo` if different.
 
 ---

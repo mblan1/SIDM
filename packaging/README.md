@@ -39,5 +39,5 @@ ready to drop into any static host (GitHub Pages, Cloudflare Pages,
 S3, etc.). No JS, no build step — edit and deploy.
 
 The "Download for Windows" button currently points at
-`https://github.com/snw-dev/SIDM/releases/latest` which redirects to
+`https://github.com/mblan1/SIDM/releases/latest` which redirects to
 whichever Setup.exe is the latest release asset.

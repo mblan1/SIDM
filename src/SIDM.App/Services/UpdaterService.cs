@@ -56,6 +56,13 @@ public sealed class UpdaterService
     public const string FeedUrlSettingKey = "updates.feedUrl";
     public const string AutoCheckSettingKey = "updates.autoCheckOnStartup";
 
+    /// <summary>
+    /// Hard-coded fallback so a brand-new install auto-checks the public
+    /// GitHub releases without the user having to paste a URL into Settings.
+    /// Overridden the moment the user enters their own value.
+    /// </summary>
+    public const string DefaultFeedUrl = "https://github.com/mblan1/SIDM";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<UpdaterService> _logger;
 
@@ -96,7 +103,11 @@ public sealed class UpdaterService
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
-            FeedUrl = await settings.GetAsync<string>(FeedUrlSettingKey, cancellationToken);
+            var persistedFeed = await settings.GetAsync<string>(FeedUrlSettingKey, cancellationToken);
+            // Empty-string sentinel means "user explicitly cleared it" — respect that.
+            FeedUrl = persistedFeed is null ? DefaultFeedUrl
+                : string.IsNullOrWhiteSpace(persistedFeed) ? null
+                : persistedFeed;
 
             // Detect first-run separately from persisted=false so we can default
             // to enabled. ISettingsRepository.GetAsync<bool> returns default(bool)

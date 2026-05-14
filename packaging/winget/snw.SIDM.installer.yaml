@@ -32,7 +32,7 @@ InstallerSwitches:
 
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/snw-dev/SIDM/releases/download/v0.1.0/SIDM-Setup.exe
+    InstallerUrl: https://github.com/mblan1/SIDM/releases/download/v0.1.0/SIDM-Setup.exe
     InstallerSha256: REPLACE_WITH_SHA256_OF_SETUP_EXE
     ProductCode: '{REPLACE-WITH-VELOPACK-PRODUCT-GUID}'
     ReleaseDate: 2026-05-11
