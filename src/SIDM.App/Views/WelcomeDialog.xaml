@@ -12,45 +12,52 @@
                  WindowCornerPreference="Round"
                  WindowStartupLocation="CenterOwner"
                  ShowInTaskbar="False">
-    <Grid Margin="32,56,32,28">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Grid.RowSpan="3" VerticalAlignment="Top" Title="Welcome" />
+        <ui:TitleBar Grid.Row="0" Title="Welcome" />
 
-        <StackPanel Grid.Row="0">
-            <ui:SymbolIcon Symbol="ArrowDownload24" FontSize="36" HorizontalAlignment="Left" Margin="0,0,0,8" />
-            <TextBlock Text="Welcome to SIDM" FontSize="22" FontWeight="SemiBold" />
-            <TextBlock Text="Snw Internet Download Manager — fast, segmented downloads with browser capture, schedules, and video grabbing."
-                       Opacity="0.7" Margin="0,4,0,0" TextWrapping="Wrap" />
-        </StackPanel>
+        <Grid Grid.Row="1" Margin="32,8,32,28">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="1" Margin="0,24,0,0">
-            <StackPanel Margin="0,0,0,12">
-                <TextBlock Text="1. Install the browser extension" FontWeight="SemiBold" />
-                <TextBlock Opacity="0.7" TextWrapping="Wrap" Margin="0,2,0,0"
-                           Text="Chrome / Edge / Brave: load src/SIDM.Extension.Chrome/dist as an unpacked extension. Firefox: about:debugging → Load Temporary Add-on. The native messaging host was registered automatically on install." />
+            <StackPanel Grid.Row="0">
+                <ui:SymbolIcon Symbol="ArrowDownload24" FontSize="36" HorizontalAlignment="Left" Margin="0,0,0,8" />
+                <TextBlock Text="Welcome to SIDM" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Text="Snw Internet Download Manager — fast, segmented downloads with browser capture, schedules, and video grabbing."
+                           Opacity="0.7" Margin="0,4,0,0" TextWrapping="Wrap" />
             </StackPanel>
 
-            <StackPanel Margin="0,0,0,12">
-                <TextBlock Text="2. Optional — install yt-dlp + ffmpeg" FontWeight="SemiBold" />
-                <TextBlock Opacity="0.7" TextWrapping="Wrap" Margin="0,2,0,0"
-                           Text="Add yt-dlp.exe and ffmpeg.exe to PATH (or configure paths in Settings → Video downloader) to enable YouTube downloads and MP4 muxing for HLS streams." />
+            <StackPanel Grid.Row="1" Margin="0,24,0,0">
+                <StackPanel Margin="0,0,0,12">
+                    <TextBlock Text="1. Install the browser extension" FontWeight="SemiBold" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="Chrome / Edge / Brave: load src/SIDM.Extension.Chrome/dist as an unpacked extension. Firefox: about:debugging → Load Temporary Add-on. The native messaging host was registered automatically on install." />
+                </StackPanel>
+
+                <StackPanel Margin="0,0,0,12">
+                    <TextBlock Text="2. Optional — install yt-dlp + ffmpeg" FontWeight="SemiBold" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="Add yt-dlp.exe and ffmpeg.exe to PATH (or configure paths in Settings → Video downloader) to enable YouTube downloads and MP4 muxing for HLS streams." />
+                </StackPanel>
+
+                <StackPanel Margin="0,0,0,12">
+                    <TextBlock Text="3. Open Settings to tune the basics" FontWeight="SemiBold" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="Max concurrent downloads, global bandwidth cap, schedule rules, categories, theme — all reachable from the Settings button in the toolbar." />
+                </StackPanel>
             </StackPanel>
 
-            <StackPanel Margin="0,0,0,12">
-                <TextBlock Text="3. Open Settings to tune the basics" FontWeight="SemiBold" />
-                <TextBlock Opacity="0.7" TextWrapping="Wrap" Margin="0,2,0,0"
-                           Text="Max concurrent downloads, global bandwidth cap, schedule rules, categories, theme — all reachable from the Settings button in the toolbar." />
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                <ui:Button Content="Open Settings" Margin="0,0,8,0" Click="OnOpenSettings" />
+                <ui:Button Content="Get started" Appearance="Primary" Click="OnGetStarted" IsDefault="True" />
             </StackPanel>
-        </StackPanel>
-
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <ui:Button Content="Open Settings" Margin="0,0,8,0" Click="OnOpenSettings" />
-            <ui:Button Content="Get started" Appearance="Primary" Click="OnGetStarted" IsDefault="True" />
-        </StackPanel>
+        </Grid>
     </Grid>
 </ui:FluentWindow>

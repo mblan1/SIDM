@@ -3,8 +3,8 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="Schedule rule"
-                 Height="520"
-                 Width="520"
+                 Height="560"
+                 Width="540"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
                  Icon="pack://application:,,,/Resources/sidm.png"
@@ -12,73 +12,79 @@
                  WindowCornerPreference="Round"
                  WindowStartupLocation="CenterOwner"
                  ShowInTaskbar="False">
-    <Grid Margin="24,48,24,24">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Grid.RowSpan="3" VerticalAlignment="Top" Title="Schedule rule" />
+        <ui:TitleBar Grid.Row="0" Title="Schedule rule" />
 
-        <StackPanel Grid.Row="1" Margin="0,8,0,0">
-            <TextBlock Text="Name" Margin="0,0,0,4" />
-            <ui:TextBox x:Name="NameBox" PlaceholderText="e.g. Off-peak night" />
+        <Grid Grid.Row="1" Margin="24,8,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-            <CheckBox x:Name="EnabledBox" Margin="0,16,0,0" Content="Enabled" IsChecked="True" />
+            <StackPanel Grid.Row="0">
+                <TextBlock Text="Name" Margin="0,0,0,4" />
+                <ui:TextBox x:Name="NameBox" PlaceholderText="e.g. Off-peak night" />
 
-            <Grid Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                    <TextBlock Text="Start time (HH:mm)" Margin="0,0,0,4" />
-                    <ui:TextBox x:Name="StartTimeBox" PlaceholderText="22:00" />
+                <CheckBox x:Name="EnabledBox" Margin="0,16,0,0" Content="Enabled" IsChecked="True" />
+
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="Start time (HH:mm)" Margin="0,0,0,4" />
+                        <ui:TextBox x:Name="StartTimeBox" PlaceholderText="22:00" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                        <TextBlock Text="End time (HH:mm)" Margin="0,0,0,4" />
+                        <ui:TextBox x:Name="EndTimeBox" PlaceholderText="06:00" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="Days" Margin="0,16,0,4" />
+                <WrapPanel>
+                    <CheckBox x:Name="MonBox" Content="Mon" Margin="0,0,12,4" />
+                    <CheckBox x:Name="TueBox" Content="Tue" Margin="0,0,12,4" />
+                    <CheckBox x:Name="WedBox" Content="Wed" Margin="0,0,12,4" />
+                    <CheckBox x:Name="ThuBox" Content="Thu" Margin="0,0,12,4" />
+                    <CheckBox x:Name="FriBox" Content="Fri" Margin="0,0,12,4" />
+                    <CheckBox x:Name="SatBox" Content="Sat" Margin="0,0,12,4" />
+                    <CheckBox x:Name="SunBox" Content="Sun" Margin="0,0,12,4" />
+                </WrapPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <ui:Button Content="Weekdays" Click="OnPickWeekdays" />
+                    <ui:Button Content="Weekends" Margin="8,0,0,0" Click="OnPickWeekends" />
+                    <ui:Button Content="Every day" Margin="8,0,0,0" Click="OnPickAllDays" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                    <TextBlock Text="End time (HH:mm)" Margin="0,0,0,4" />
-                    <ui:TextBox x:Name="EndTimeBox" PlaceholderText="06:00" />
-                </StackPanel>
-            </Grid>
 
-            <TextBlock Text="Days" Margin="0,16,0,4" />
-            <WrapPanel>
-                <CheckBox x:Name="MonBox" Content="Mon" Margin="0,0,12,4" />
-                <CheckBox x:Name="TueBox" Content="Tue" Margin="0,0,12,4" />
-                <CheckBox x:Name="WedBox" Content="Wed" Margin="0,0,12,4" />
-                <CheckBox x:Name="ThuBox" Content="Thu" Margin="0,0,12,4" />
-                <CheckBox x:Name="FriBox" Content="Fri" Margin="0,0,12,4" />
-                <CheckBox x:Name="SatBox" Content="Sat" Margin="0,0,12,4" />
-                <CheckBox x:Name="SunBox" Content="Sun" Margin="0,0,12,4" />
-            </WrapPanel>
-            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                <ui:Button Content="Weekdays" Click="OnPickWeekdays" />
-                <ui:Button Content="Weekends" Margin="8,0,0,0" Click="OnPickWeekends" />
-                <ui:Button Content="Every day" Margin="8,0,0,0" Click="OnPickAllDays" />
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="Max concurrent (0 = no override)" Margin="0,0,0,4" />
+                        <ui:TextBox x:Name="MaxConcurrentBox" PlaceholderText="0" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                        <TextBlock Text="Bandwidth KiB/s (0 = no override)" Margin="0,0,0,4" />
+                        <ui:TextBox x:Name="BandwidthBox" PlaceholderText="0" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock x:Name="ErrorText" Foreground="#FF6B6B" Margin="0,12,0,0" />
             </StackPanel>
 
-            <Grid Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                    <TextBlock Text="Max concurrent (0 = no override)" Margin="0,0,0,4" />
-                    <ui:TextBox x:Name="MaxConcurrentBox" PlaceholderText="0" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                    <TextBlock Text="Bandwidth KiB/s (0 = no override)" Margin="0,0,0,4" />
-                    <ui:TextBox x:Name="BandwidthBox" PlaceholderText="0" />
-                </StackPanel>
-            </Grid>
-
-            <TextBlock x:Name="ErrorText" Foreground="#FF6B6B" Margin="0,12,0,0" />
-        </StackPanel>
-
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" />
-            <ui:Button Content="Save" Appearance="Primary" Click="OnAccept" IsDefault="True" />
-        </StackPanel>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" />
+                <ui:Button Content="Save" Appearance="Primary" Click="OnAccept" IsDefault="True" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </ui:FluentWindow>

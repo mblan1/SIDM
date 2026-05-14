@@ -17,7 +17,7 @@
                  WindowCornerPreference="Round"
                  WindowStartupLocation="CenterScreen"
                  d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
-    <Grid Background="Transparent" MouseDown="OnContentMouseDown">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -55,7 +55,14 @@
         </StackPanel>
 
         <!-- Sidebar + grid -->
-        <Grid Grid.Row="2" Margin="16,8,16,8">
+        <!-- Background="Transparent" makes the gap between sidebar and grid
+             hit-testable so MouseDown fires there. The handler stays OFF the
+             root Grid because that would extend into the title bar region
+             and clash with WindowChrome's caption hit-testing (drag-to-move
+             stops working). -->
+        <Grid Grid.Row="2" Margin="16,8,16,8"
+              Background="Transparent"
+              MouseDown="OnContentMouseDown">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200" MinWidth="160" />
                 <ColumnDefinition Width="4" />
