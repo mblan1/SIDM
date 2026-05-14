@@ -181,6 +181,30 @@ public sealed class DownloadEngine
     }
 
     /// <summary>
+    /// Backfills <see cref="Download.TotalBytes"/> from the actual file on disk
+    /// when the downloader couldn't tell us a total up-front (HLS/DASH live
+    /// playlists, HTTP responses without Content-Length). Called from each
+    /// completion path so a finished row in the UI always shows its real size
+    /// instead of "Unknown".
+    /// </summary>
+    private static void CaptureFinalFileSizeIfMissing(Download download)
+    {
+        if (download.TotalBytes is > 0) return;
+        try
+        {
+            var fi = new FileInfo(download.TargetPath);
+            if (fi.Exists && fi.Length > 0)
+            {
+                download.TotalBytes = fi.Length;
+            }
+        }
+        catch
+        {
+            // Best-effort — leave TotalBytes as it was.
+        }
+    }
+
+    /// <summary>
     /// yt-dlp run path. Spawns the binary, streams progress through the same
     /// <see cref="IDownloadProgressSink"/> the HTTP engine uses (mapped to a
     /// single synthetic segment with Idx=0 because yt-dlp does not expose
@@ -279,6 +303,7 @@ public sealed class DownloadEngine
                 download.TargetPath = result.FinalFilePath!;
                 download.FileName = Path.GetFileName(result.FinalFilePath!);
             }
+            CaptureFinalFileSizeIfMissing(download);
         }
         else
         {
@@ -384,6 +409,7 @@ public sealed class DownloadEngine
 
             download.TargetPath = finalPath;
             download.FileName = Path.GetFileName(finalPath);
+            CaptureFinalFileSizeIfMissing(download);
         }
         else
         {
@@ -462,6 +488,7 @@ public sealed class DownloadEngine
                 download.TargetPath = result.FinalFilePath!;
                 download.FileName = Path.GetFileName(result.FinalFilePath!);
             }
+            CaptureFinalFileSizeIfMissing(download);
         }
         else
         {
@@ -498,6 +525,7 @@ public sealed class DownloadEngine
             download.CompletedUtc = DateTimeOffset.UtcNow;
             download.TotalBytes = result.TotalBytes;
             download.ErrorMessage = null;
+            CaptureFinalFileSizeIfMissing(download);
         }
         else if (result.FailureKind == DownloadFailureKind.Canceled)
         {

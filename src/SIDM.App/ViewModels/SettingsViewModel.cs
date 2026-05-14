@@ -62,6 +62,10 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _themeIndex;
 
+    /// <summary>Close-button behavior. Bound to a ComboBox.SelectedIndex (HideToTray=0, Exit=1).</summary>
+    [ObservableProperty]
+    private int _closeBehaviorIndex;
+
     public ObservableCollection<ScheduleRuleRowViewModel> Rules { get; } = new();
 
     public ObservableCollection<CategoryRowViewModel> Categories { get; } = new();

@@ -103,8 +103,25 @@ public partial class App : Application
             Log.Warning(ex, "Theme load/apply failed; falling back to compiled-in Dark");
         }
 
+        // Seed the five IDM-style default categories (Compressed, Documents,
+        // Music, Programs, Video) on first run so the sidebar isn't empty.
+        // Idempotent — skips if the user already has any category defined.
+        await _host.Services.GetRequiredService<Services.CategorySeeder>().SeedIfEmptyAsync();
+
+        // Load the persisted "close button does what" preference before the
+        // main window appears so MainWindow.OnWindowClosing sees the right
+        // value the first time the user hits X.
+        await _host.Services.GetRequiredService<Services.CloseBehaviorService>().LoadAsync();
+
         var mainWindow = _host.Services.GetRequiredService<MainWindow>();
         mainWindow.Show();
+
+        // Tray icon stays alive for the whole process — initialize after
+        // MainWindow exists so the tray's "Open SIDM" item can target it.
+        // Switching ShutdownMode to explicit means hiding MainWindow does
+        // NOT trigger an OnLastWindowClose shutdown.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        _host.Services.GetRequiredService<Services.TrayIconService>().Initialize(mainWindow);
     }
 
     protected override async void OnExit(ExitEventArgs e)
@@ -116,6 +133,18 @@ public partial class App : Application
         }
 
         Log.Information("Shutting down");
+        try
+        {
+            // Hide + dispose the tray icon explicitly — leaving it visible
+            // past process exit produces a phantom icon in the notification
+            // area until the user hovers over it.
+            if (_host.Services.GetService(typeof(Services.TrayIconService)) is Services.TrayIconService tray)
+            {
+                tray.Dispose();
+            }
+        }
+        catch { /* best-effort */ }
+
         using (_host)
         {
             await _host.StopAsync(TimeSpan.FromSeconds(5));

@@ -35,6 +35,9 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<CrashReportingStartup>();
         services.AddSingleton<ThemeService>();
         services.AddSingleton<OnboardingService>();
+        services.AddSingleton<CategorySeeder>();
+        services.AddSingleton<CloseBehaviorService>();
+        services.AddSingleton<TrayIconService>();
 
         // Compose the progress sink so progress goes to BOTH the SQLite writer
         // and the in-memory UI bus. Replace the singleton IDownloadProgressSink
@@ -59,6 +62,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MainWindow>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<DownloadsViewModel>();
+        services.AddSingleton<CategoriesViewModel>();
         services.AddTransient<Views.SettingsDialog>();
         // DownloadsViewModel owns the dispatcher and the rows collection, so it
         // implements IDownloadIntake too (the IPC dispatcher consults it to

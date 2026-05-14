@@ -32,7 +32,16 @@ public partial class DownloadProgressDialog : FluentWindow
         if (e.PropertyName != nameof(DownloadRowViewModel.Status)) return;
         if (_row.Status == SIDM.Core.Models.DownloadStatus.Completed)
         {
-            Dispatcher.BeginInvoke(() => Close());
+            Dispatcher.BeginInvoke(() =>
+            {
+                var done = new DownloadCompletedDialog(_row.FileName, _row.TargetPath)
+                {
+                    Owner = Owner,
+                };
+                Close();
+                done.Show();
+                done.Activate();
+            });
         }
     }
 

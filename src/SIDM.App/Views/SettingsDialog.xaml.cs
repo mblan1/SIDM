@@ -19,6 +19,7 @@ public partial class SettingsDialog : FluentWindow
     private readonly UpdaterService _updater;
     private readonly CrashReportingService _crashReporting;
     private readonly ThemeService _theme;
+    private readonly CloseBehaviorService _closeBehavior;
     private readonly IServiceScopeFactory _scopeFactory;
 
     public SettingsViewModel ViewModel { get; } = new();
@@ -31,6 +32,7 @@ public partial class SettingsDialog : FluentWindow
         UpdaterService updater,
         CrashReportingService crashReporting,
         ThemeService theme,
+        CloseBehaviorService closeBehavior,
         IServiceScopeFactory scopeFactory)
     {
         InitializeComponent();
@@ -41,6 +43,7 @@ public partial class SettingsDialog : FluentWindow
         _updater = updater;
         _crashReporting = crashReporting;
         _theme = theme;
+        _closeBehavior = closeBehavior;
         _scopeFactory = scopeFactory;
         DataContext = ViewModel;
 
@@ -54,6 +57,7 @@ public partial class SettingsDialog : FluentWindow
         ViewModel.CrashReportsEnabled = _crashReporting.IsEnabled;
         ViewModel.CrashReportsDsn = _crashReporting.Dsn;
         ViewModel.ThemeIndex = (int)_theme.Current;
+        ViewModel.CloseBehaviorIndex = (int)_closeBehavior.Current;
 
         _ = LoadRulesAsync();
         _ = LoadCategoriesAsync();
@@ -115,6 +119,7 @@ public partial class SettingsDialog : FluentWindow
         await _crashReporting.SetEnabledAsync(ViewModel.CrashReportsEnabled);
 
         await _theme.SetAsync((AppTheme)ViewModel.ThemeIndex);
+        await _closeBehavior.SaveAsync((CloseBehavior)ViewModel.CloseBehaviorIndex);
 
         DialogResult = true;
         Close();

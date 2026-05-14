@@ -1,0 +1,60 @@
+<ui:FluentWindow x:Class="SIDM.App.Views.DownloadCompletedDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 mc:Ignorable="d"
+                 Title="Download complete"
+                 Height="240"
+                 Width="520"
+                 ResizeMode="NoResize"
+                 ExtendsContentIntoTitleBar="True"
+                 Icon="pack://application:,,,/Resources/sidm.png"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 WindowStartupLocation="CenterOwner"
+                 ShowInTaskbar="True">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Download complete" />
+
+        <Grid Grid.Row="1" Margin="24,8,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="#15FFFFFF" CornerRadius="8" Padding="12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ui:SymbolIcon Grid.Column="0" Symbol="CheckmarkCircle24" FontSize="36"
+                                   Foreground="#4ADE80" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="Download complete" FontWeight="SemiBold" FontSize="14" />
+                        <TextBlock x:Name="FileNameText" FontSize="12" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="TargetPathText" Opacity="0.65" FontSize="11" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <ui:Button Content="Open file" Margin="0,0,8,0"
+                           Icon="{ui:SymbolIcon Symbol=Open24}"
+                           Appearance="Primary"
+                           Click="OnOpenFile" IsDefault="True" />
+                <ui:Button Content="Open folder" Margin="0,0,8,0"
+                           Icon="{ui:SymbolIcon Symbol=FolderOpen24}"
+                           Click="OnOpenFolder" />
+                <ui:Button Content="Close" Click="OnClose" IsCancel="True" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

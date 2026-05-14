@@ -11,21 +11,27 @@
                  Width="640"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
+                 Icon="pack://application:,,,/Resources/sidm.png"
                  WindowBackdropType="Mica"
                  WindowCornerPreference="Round"
                  WindowStartupLocation="CenterOwner"
                  ShowInTaskbar="False"
                  d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}">
-    <Grid Margin="24,48,24,24">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Grid.RowSpan="3" VerticalAlignment="Top" Title="Settings" />
+        <ui:TitleBar Grid.Row="0" Title="Settings" />
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+        <Grid Grid.Row="1" Margin="24,8,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <TextBlock Text="Appearance" FontWeight="SemiBold" />
                 <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
@@ -34,6 +40,14 @@
                     <ComboBoxItem>Follow Windows</ComboBoxItem>
                     <ComboBoxItem>Light</ComboBoxItem>
                     <ComboBoxItem>Dark</ComboBoxItem>
+                </ComboBox>
+
+                <TextBlock Margin="0,24,0,0" Text="When the window close button is clicked" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
+                           Text="Hide to tray keeps SIDM running in the notification area. Exit shuts the app down." />
+                <ComboBox Width="220" HorizontalAlignment="Left" SelectedIndex="{Binding CloseBehaviorIndex, Mode=TwoWay}">
+                    <ComboBoxItem>Hide to tray</ComboBoxItem>
+                    <ComboBoxItem>Exit completely</ComboBoxItem>
                 </ComboBox>
 
                 <TextBlock Margin="0,24,0,0" Text="Maximum concurrent downloads" FontWeight="SemiBold" />
@@ -209,9 +223,10 @@
             </StackPanel>
         </ScrollViewer>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" />
-            <ui:Button Content="Save" Appearance="Primary" Click="OnAccept" IsDefault="True" />
-        </StackPanel>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" />
+                <ui:Button Content="Save" Appearance="Primary" Click="OnAccept" IsDefault="True" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </ui:FluentWindow>

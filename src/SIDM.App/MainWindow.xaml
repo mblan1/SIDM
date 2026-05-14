@@ -7,14 +7,17 @@
                  xmlns:vm="clr-namespace:SIDM.App.ViewModels"
                  mc:Ignorable="d"
                  Title="SIDM"
+                 Icon="pack://application:,,,/Resources/sidm.png"
                  Height="640"
-                 Width="1100"
+                 Width="1200"
+                 MinWidth="900"
+                 MinHeight="500"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
                  WindowCornerPreference="Round"
                  WindowStartupLocation="CenterScreen"
                  d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
-    <Grid>
+    <Grid Background="Transparent" MouseDown="OnContentMouseDown">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -33,17 +36,17 @@
             <ui:Button Margin="8,0,0,0"
                        Icon="{ui:SymbolIcon Symbol=Pause24}"
                        Content="Pause"
-                       Command="{Binding Downloads.PauseCommand}"
+                       Command="{Binding Downloads.PauseSelectedCommand}"
                        CommandParameter="{Binding Downloads.SelectedRow}" />
             <ui:Button Margin="8,0,0,0"
                        Icon="{ui:SymbolIcon Symbol=Play24}"
                        Content="Resume"
-                       Command="{Binding Downloads.ResumeCommand}"
+                       Command="{Binding Downloads.ResumeSelectedCommand}"
                        CommandParameter="{Binding Downloads.SelectedRow}" />
             <ui:Button Margin="8,0,0,0"
                        Icon="{ui:SymbolIcon Symbol=Delete24}"
                        Content="Remove"
-                       Command="{Binding Downloads.RemoveCommand}"
+                       Command="{Binding Downloads.RemoveSelectedCommand}"
                        CommandParameter="{Binding Downloads.SelectedRow}" />
             <ui:Button Margin="8,0,0,0"
                        Icon="{ui:SymbolIcon Symbol=Settings24}"
@@ -51,41 +54,185 @@
                        Command="{Binding Downloads.OpenSettingsCommand}" />
         </StackPanel>
 
-        <!-- Download list -->
-        <DataGrid Grid.Row="2" Margin="16,0,16,8"
-                  ItemsSource="{Binding Downloads.Rows}"
-                  SelectedItem="{Binding Downloads.SelectedRow, Mode=TwoWay}"
-                  AutoGenerateColumns="False"
-                  CanUserAddRows="False"
-                  CanUserDeleteRows="False"
-                  IsReadOnly="True"
-                  GridLinesVisibility="None"
-                  HeadersVisibility="Column"
-                  SelectionMode="Single"
-                  Background="Transparent"
-                  RowBackground="Transparent"
-                  AlternatingRowBackground="#11FFFFFF"
-                  BorderThickness="0">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="2*" />
-                <DataGridTextColumn Header="Status" Binding="{Binding StatusDisplay}" Width="Auto" MinWidth="100" />
-                <DataGridTemplateColumn Header="Progress" Width="3*" MinWidth="200">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Grid Margin="4">
-                                <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100" Height="6" />
-                                <TextBlock Text="{Binding ProgressDisplay}" Margin="4,8,0,0" FontSize="11" Opacity="0.85" />
-                            </Grid>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="3*" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <!-- Sidebar + grid -->
+        <Grid Grid.Row="2" Margin="16,8,16,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" MinWidth="160" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Categories sidebar -->
+            <Border Grid.Column="0"
+                    Background="{DynamicResource SubtleFillColorTertiaryBrush}"
+                    CornerRadius="8" Padding="4">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="Categories"
+                               Margin="12,8,8,4"
+                               FontWeight="SemiBold" FontSize="12" Opacity="0.7" />
+                    <ListBox Grid.Row="1"
+                             ItemsSource="{Binding Categories.Nodes}"
+                             SelectedItem="{Binding Categories.SelectedNode, Mode=TwoWay}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="10,6" />
+                                <Setter Property="Margin" Value="2,1" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Bd"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8"
+                                             VerticalAlignment="Center"
+                                             Margin="0,0,8,0"
+                                             Fill="{Binding Color, FallbackValue=#888888, TargetNullValue=#888888}" />
+                                    <TextBlock Text="{Binding Name}"
+                                               VerticalAlignment="Center"
+                                               FontSize="13" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="4" Background="Transparent"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext" />
+
+            <!-- Download list -->
+            <DataGrid x:Name="DownloadsGrid"
+                      Grid.Column="2"
+                      ItemsSource="{Binding Categories.RowsView}"
+                      SelectedItem="{Binding Downloads.SelectedRow, Mode=TwoWay}"
+                      SelectionChanged="OnDownloadsGridSelectionChanged"
+                      PreviewMouseDown="OnDownloadsGridPreviewMouseDown"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      IsReadOnly="True"
+                      GridLinesVisibility="None"
+                      HeadersVisibility="Column"
+                      SelectionMode="Extended"
+                      SelectionUnit="FullRow"
+                      Background="Transparent"
+                      RowBackground="Transparent"
+                      AlternatingRowBackground="{DynamicResource SubtleFillColorTertiaryBrush}"
+                      BorderThickness="0"
+                      RowHeight="40"
+                      ColumnHeaderHeight="32"
+                      VerticalGridLinesBrush="Transparent"
+                      HorizontalGridLinesBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <Setter Property="Background" Value="Transparent" />
+                        <EventSetter Event="MouseDoubleClick" Handler="OnRowDoubleClick" />
+                    </Style>
+                </DataGrid.RowStyle>
+                <DataGrid.CellStyle>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="Padding" Value="6,0" />
+                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.CellStyle>
+                <DataGrid.ColumnHeaderStyle>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="0,0,0,1" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+                        <Setter Property="Padding" Value="8,4" />
+                        <Setter Property="FontWeight" Value="SemiBold" />
+                        <Setter Property="FontSize" Value="12" />
+                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <Setter Property="HorizontalContentAlignment" Value="Left" />
+                    </Style>
+                </DataGrid.ColumnHeaderStyle>
+                <DataGrid.Columns>
+                    <!-- Shell icon + file name -->
+                    <DataGridTemplateColumn Header="File Name" Width="2.5*" MinWidth="240">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Grid Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center">
+                                        <!-- Fallback monochrome glyph; hidden when the shell icon resolves. -->
+                                        <ui:SymbolIcon Symbol="{Binding FileIcon}"
+                                                       FontSize="18"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Center"
+                                                       Opacity="0.6" />
+                                        <Image Source="{Binding FileIconImage}"
+                                               Width="20" Height="20"
+                                               Stretch="Uniform" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding FileName}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding FileName}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTextColumn Header="Size" Binding="{Binding SizeDisplay}" Width="Auto" MinWidth="140" />
+                    <DataGridTextColumn Header="Status" Binding="{Binding StatusDisplay}" Width="Auto" MinWidth="90" />
+                    <DataGridTextColumn Header="Time left" Binding="{Binding TimeLeftDisplay}" Width="Auto" MinWidth="80" />
+                    <DataGridTextColumn Header="Transfer rate" Binding="{Binding TransferRateDisplay}" Width="Auto" MinWidth="100" />
+                    <DataGridTextColumn Header="Last Try" Binding="{Binding LastTryDisplay}" Width="Auto" MinWidth="110" />
+                    <DataGridTextColumn Header="Description" Binding="{Binding DescriptionDisplay}" Width="*" MinWidth="120" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
 
         <!-- Status bar -->
-        <Border Grid.Row="3" Background="#22000000" Padding="16,6">
-            <TextBlock Text="{Binding Downloads.StatusBarText}" FontSize="12" Opacity="0.8" />
+        <Border Grid.Row="3"
+                Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                Padding="16,6">
+            <TextBlock Text="{Binding Downloads.StatusBarText}"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       FontSize="12" />
         </Border>
     </Grid>
 </ui:FluentWindow>

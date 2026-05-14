@@ -30,6 +30,14 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 
     public ObservableCollection<DownloadRowViewModel> Rows { get; } = new();
 
+    /// <summary>
+    /// Mirrors the multi-selection from the downloads DataGrid. Kept in sync
+    /// by MainWindow's SelectionChanged handler — WPF's DataGrid.SelectedItems
+    /// isn't directly bindable, so we copy on every change. Bulk commands
+    /// (PauseSelected/ResumeSelected/RemoveSelected) act on this collection.
+    /// </summary>
+    public ObservableCollection<DownloadRowViewModel> SelectedRows { get; } = new();
+
     [ObservableProperty]
     private DownloadRowViewModel? _selectedRow;
 
@@ -52,7 +60,26 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
         _logger = logger;
         _notifier.Created += OnDownloadCreated;
         _engine.Finished += OnEngineFinished;
+
+        // The toolbar's Pause/Resume/Remove buttons stay disabled until the
+        // user has at least one row selected. When the selection changes,
+        // re-query CanExecute on the bulk commands so WPF refreshes button
+        // IsEnabled state. (DataGrid.SelectedItems isn't bindable so we
+        // mirror it into SelectedRows from the code-behind handler.)
+        SelectedRows.CollectionChanged += (_, _) => NotifySelectionCommandsChanged();
     }
+
+    /// <summary>True when at least one row is selected — gates the bulk toolbar commands.</summary>
+    private bool CanActOnSelection() => SelectedRows.Count > 0 || SelectedRow is not null;
+
+    private void NotifySelectionCommandsChanged()
+    {
+        PauseSelectedCommand.NotifyCanExecuteChanged();
+        ResumeSelectedCommand.NotifyCanExecuteChanged();
+        RemoveSelectedCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSelectedRowChanged(DownloadRowViewModel? value) => NotifySelectionCommandsChanged();
 
     private void OnEngineFinished(long downloadId, DownloadStatus status)
     {
@@ -152,6 +179,18 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 
         return await dispatcher.InvokeAsync(async () =>
         {
+            // Browser-capture path: minimize the main window before showing
+            // the popup. Without this, MainWindow stays on top of the dialog
+            // (especially right after launch, when MainWindow.Show() runs a
+            // beat before the IPC message arrives — the dialog appears for a
+            // moment then disappears behind the main window). The window
+            // stays in the taskbar so the user can click back to it.
+            var mw = Application.Current?.MainWindow;
+            if (mw is not null && mw.IsVisible && mw.WindowState != WindowState.Minimized)
+            {
+                mw.WindowState = WindowState.Minimized;
+            }
+
             var row = await ShowDialogAndStartAsync(request);
             return row is null
                 ? new DownloadIntakeResult(null, "Canceled")
@@ -184,12 +223,19 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
     /// </summary>
     private async Task<DownloadRowViewModel?> ShowDialogAndStartAsync(DownloadRequestMessage? seed)
     {
-        var owner = Application.Current?.MainWindow;
+        var dialog = new AddDownloadDialog();
 
-        var dialog = new AddDownloadDialog
+        if (seed is not null)
         {
-            Owner = owner,
-        };
+            // IPC path (browser extension): standalone popup — do NOT bring the
+            // whole main window forward, just show the dialog over whatever the
+            // user is doing. Toolbar path keeps the centered-on-owner behavior.
+            dialog.ConfigureAsStandalonePopup();
+        }
+        else
+        {
+            dialog.Owner = Application.Current?.MainWindow;
+        }
 
         if (seed is not null)
         {
@@ -304,6 +350,96 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             Owner = owner,
         };
         dlg.Show();
+        dlg.Activate();
+    }
+
+    /// <summary>
+    /// Picks the set of rows to act on for a toolbar bulk command. Preference:
+    /// multi-select if it has more than the single focus item, else fall back
+    /// to the explicit row parameter (e.g. context-menu invocation) or the
+    /// last-selected row. Returns empty when nothing's selected.
+    /// </summary>
+    private IReadOnlyList<DownloadRowViewModel> ResolveTargets(DownloadRowViewModel? fallback)
+    {
+        if (SelectedRows.Count > 0) return SelectedRows.ToList();
+        if (fallback is not null) return new[] { fallback };
+        return Array.Empty<DownloadRowViewModel>();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanActOnSelection))]
+    private async Task PauseSelectedAsync(DownloadRowViewModel? fallbackRow)
+    {
+        foreach (var row in ResolveTargets(fallbackRow))
+        {
+            await PauseAsync(row);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanActOnSelection))]
+    private async Task ResumeSelectedAsync(DownloadRowViewModel? fallbackRow)
+    {
+        foreach (var row in ResolveTargets(fallbackRow))
+        {
+            await ResumeAsync(row);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanActOnSelection))]
+    private async Task RemoveSelectedAsync(DownloadRowViewModel? fallbackRow)
+    {
+        // Snapshot — RemoveAsync mutates Rows and SelectedRows, so iterating
+        // the live collection would skip or revisit entries.
+        var targets = ResolveTargets(fallbackRow).ToList();
+        if (targets.Count == 0) return;
+
+        // Always confirm — Remove from this app is a one-click action and we
+        // need an explicit signal before nuking the on-disk file.
+        var confirm = new Views.RemoveConfirmDialog(targets.Count)
+        {
+            Owner = Application.Current?.MainWindow,
+        };
+        if (confirm.ShowDialog() != true) return;
+        var deleteFiles = confirm.DeleteFiles;
+
+        foreach (var row in targets)
+        {
+            await RemoveRowAsync(row, deleteFiles);
+        }
+    }
+
+    /// <summary>
+    /// Core single-row removal. Pulls the row out of the queue, deletes the DB
+    /// record, drops the live VM entry, and (optionally) wipes the file from
+    /// disk. The file-delete is best-effort — failures are logged but don't
+    /// block the rest of the removal.
+    /// </summary>
+    private async Task RemoveRowAsync(DownloadRowViewModel row, bool deleteFile)
+    {
+        var path = row.TargetPath;
+        var fileName = row.FileName;
+
+        _queue.Remove(row.Id);
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<IDownloadRepository>();
+            await repo.RemoveAsync(row.Id);
+        }
+        Rows.Remove(row);
+        row.Dispose();
+
+        if (deleteFile && !string.IsNullOrWhiteSpace(path))
+        {
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete downloaded file at {Path}", path);
+            }
+        }
+
+        StatusBarText = deleteFile ? $"Removed and deleted {fileName}" : $"Removed {fileName}";
     }
 
     [RelayCommand]

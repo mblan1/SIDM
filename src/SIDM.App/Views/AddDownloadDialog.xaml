@@ -11,21 +11,27 @@
                  Width="660"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
+                 Icon="pack://application:,,,/Resources/sidm.png"
                  WindowBackdropType="Mica"
                  WindowCornerPreference="Round"
                  WindowStartupLocation="CenterOwner"
                  ShowInTaskbar="False"
                  d:DataContext="{d:DesignInstance Type=vm:AddDownloadViewModel}">
-    <Grid Margin="24,48,24,24">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Grid.RowSpan="3" VerticalAlignment="Top" Title="Add download" />
+        <ui:TitleBar Grid.Row="0" Title="Add download" />
 
-        <StackPanel Grid.Row="1" Margin="0,8,0,0">
+        <Grid Grid.Row="1" Margin="24,8,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
             <TextBlock Text="URL" Margin="0,0,0,4" />
             <ui:TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
                         PlaceholderText="https://example.com/installer.exe" />
@@ -114,9 +120,10 @@
                        Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
         </StackPanel>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" />
-            <ui:Button Content="Start download" Appearance="Primary" Click="OnAccept" IsDefault="True" />
-        </StackPanel>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" />
+                <ui:Button Content="Start download" Appearance="Primary" Click="OnAccept" IsDefault="True" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </ui:FluentWindow>

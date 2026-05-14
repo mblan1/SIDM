@@ -4,6 +4,10 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <!-- WinForms enabled solely for System.Windows.Forms.NotifyIcon. The
+         alternative (Hardcodet.NotifyIcon.Wpf) adds a third-party NuGet for
+         the same outcome — WinForms NotifyIcon is built-in and battle-tested. -->
+    <UseWindowsForms>true</UseWindowsForms>
     <!-- AssemblyName intentionally not "SIDM" to dodge Vanguard / similar AV that
          locks newly-created exes by name. End users launch via Start Menu
          shortcut (created by Velopack with Product="SIDM"), so the on-disk
@@ -11,7 +15,26 @@
     <AssemblyName>SIDM.App</AssemblyName>
     <RootNamespace>SIDM.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WinForms requires DPI awareness to be set via this property or
+         Application.SetHighDpiMode at runtime — it can no longer live in
+         app.manifest. PerMonitorV2 matches our previous manifest setting. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
+
+  <!-- Application icon — only baked into the .exe when the file actually
+       exists, so the project still builds before the brand .ico is dropped
+       in by a designer (or before a publish step generates one from the PNG). -->
+  <PropertyGroup Condition="Exists('Resources/sidm.ico')">
+    <ApplicationIcon>Resources/sidm.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Ship the PNG copy as a packed resource so MainWindow.Icon /
+         dialog.Icon can pull it via pack:// URI without needing the
+         file on disk at runtime. The .ico is only used by the linker
+         for the executable's embedded icon (above). -->
+    <Resource Include="Resources/sidm.png" Condition="Exists('Resources/sidm.png')" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
