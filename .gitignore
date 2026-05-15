@@ -84,3 +84,8 @@ tools/ffmpeg.exe
 
 # Netlify CLI local state
 .netlify/
+
+# Built extensions + store-upload zips (built fresh by the npm scripts)
+src/SIDM.Extension.Chrome/dist/
+src/SIDM.Extension.Firefox/dist/
+extension-uploads/

@@ -99,12 +99,63 @@
         </div>
     </section>
 
+    <section id="privacy" class="install">
+        <div class="container">
+            <h2>Privacy</h2>
+            <p>
+                SIDM is open source under MIT. The desktop app and browser
+                extensions process data on your machine only. We do not run a
+                server, do not collect analytics, and do not transmit anything
+                except the download URLs you explicitly ask SIDM to fetch.
+            </p>
+
+            <h3>Browser extension permissions</h3>
+            <ul>
+                <li><strong>downloads</strong> — to intercept the file the browser
+                    is about to save and redirect it to SIDM.</li>
+                <li><strong>cookies + &lt;all_urls&gt;</strong> — to forward the
+                    same authentication cookies the browser would have used, so
+                    SIDM can fetch the exact bytes (gated downloads, signed
+                    URLs, etc.). The extension reads cookies only for the host
+                    of the current download and sends them over the local
+                    Native Messaging pipe — never to a remote server.</li>
+                <li><strong>nativeMessaging</strong> — to talk to
+                    <code>SIDM.BrowserHost.exe</code>, the local bridge process
+                    installed alongside the desktop app.</li>
+                <li><strong>webRequest / webNavigation / tabs</strong> — to
+                    detect HLS / DASH manifests as pages load, so the toolbar
+                    badge can show how many video streams are grabbable.</li>
+                <li><strong>contextMenus / notifications / storage</strong> —
+                    "Download with SIDM" right-click, "Queued / Failed" toasts,
+                    and persisting your extension settings locally.</li>
+            </ul>
+
+            <h3>Crash reporting (opt-in)</h3>
+            <p>
+                The desktop app has a <em>disabled-by-default</em> crash
+                reporting toggle in Settings. If you opt in, stack traces are
+                sent to a Sentry DSN you configure; URL / cookie / filename
+                values are scrubbed before sending. No analytics, no clicks,
+                no telemetry beyond the crash payload.
+            </p>
+
+            <h3>Updates</h3>
+            <p>
+                SIDM checks
+                <a href="https://github.com/mblan1/SIDM/releases">GitHub Releases</a>
+                on launch (toggleable in Settings → Updates). Only the version
+                manifest and the update package are transferred.
+            </p>
+        </div>
+    </section>
+
     <footer>
         <div class="container">
             <p>
                 © 2026 Snw ·
                 <a href="https://github.com/mblan1/SIDM/blob/main/LICENSE">MIT License</a> ·
                 <a href="https://github.com/mblan1/SIDM">Source</a> ·
+                <a href="#privacy">Privacy</a> ·
                 <a href="https://github.com/mblan1/SIDM/issues">Report a bug</a>
             </p>
         </div>

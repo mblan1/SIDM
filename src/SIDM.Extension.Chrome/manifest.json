@@ -4,6 +4,14 @@
   "short_name": "SIDM",
   "version": "0.1.0",
   "description": "Capture downloads and hand them to the SIDM desktop app for fast multi-segment downloading.",
+  "author": "Snw",
+  "homepage_url": "https://github.com/mblan1/SIDM",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -28,6 +36,11 @@
   },
   "action": {
     "default_title": "SIDM",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
   }
 }
