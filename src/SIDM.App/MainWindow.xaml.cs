@@ -115,6 +115,20 @@ public partial class MainWindow : FluentWindow
     }
 
     /// <summary>
+    /// Click handler for the "Install" button on the browser-extension
+    /// install banner. Pulls the dialog out of DI so it gets the installer +
+    /// presence services constructor-injected.
+    /// </summary>
+    private void OnOpenBrowserExtensionDialog(object sender, RoutedEventArgs e)
+    {
+        var installer = _services.GetService(typeof(BrowserExtensionInstaller)) as BrowserExtensionInstaller;
+        var presence = _services.GetService(typeof(BrowserExtensionPresence)) as BrowserExtensionPresence;
+        if (installer is null || presence is null) return;
+        var dlg = new BrowserExtensionInstallDialog(installer, presence) { Owner = this };
+        dlg.ShowDialog();
+    }
+
+    /// <summary>
     /// Double-clicking a row in the downloads grid opens either the live
     /// progress window (when still active) or the file properties window
     /// (when terminal). Hooked from <c>DataGrid.RowStyle</c> in XAML.

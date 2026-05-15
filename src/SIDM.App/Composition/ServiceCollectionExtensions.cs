@@ -38,6 +38,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<CategorySeeder>();
         services.AddSingleton<CloseBehaviorService>();
         services.AddSingleton<TrayIconService>();
+        services.AddSingleton<BrowserExtensionPresence>();
+        services.AddSingleton<BrowserExtensionInstaller>();
 
         // Compose the progress sink so progress goes to BOTH the SQLite writer
         // and the in-memory UI bus. Replace the singleton IDownloadProgressSink

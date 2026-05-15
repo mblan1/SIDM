@@ -113,6 +113,10 @@ public partial class App : Application
         // value the first time the user hits X.
         await _host.Services.GetRequiredService<Services.CloseBehaviorService>().LoadAsync();
 
+        // Load extension presence so the MainWindow banner + install dialog
+        // know up-front which browser kinds have ever connected.
+        await _host.Services.GetRequiredService<Services.BrowserExtensionPresence>().LoadAsync();
+
         var mainWindow = _host.Services.GetRequiredService<MainWindow>();
         mainWindow.Show();
 

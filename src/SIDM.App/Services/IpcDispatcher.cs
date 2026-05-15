@@ -21,6 +21,7 @@ public sealed class IpcDispatcher
     private static readonly TimeSpan DuplicateWindow = TimeSpan.FromSeconds(5);
 
     private readonly IDownloadIntake _intake;
+    private readonly BrowserExtensionPresence _presence;
     private readonly ILogger<IpcDispatcher> _logger;
 
     private readonly object _recentLock = new();
@@ -28,9 +29,11 @@ public sealed class IpcDispatcher
 
     public IpcDispatcher(
         IDownloadIntake intake,
+        BrowserExtensionPresence presence,
         ILogger<IpcDispatcher> logger)
     {
         _intake = intake;
+        _presence = presence;
         _logger = logger;
     }
 
@@ -44,11 +47,21 @@ public sealed class IpcDispatcher
         };
     }
 
-    private static IpcMessage Hello(HelloRequest req) =>
-        new HelloResponse(
+    private IpcMessage Hello(HelloRequest req)
+    {
+        // Parse the client name to learn which browser is on the other end and
+        // flip the in-app "extension installed" tracker. This is what makes
+        // the install banner disappear and the Install dialog rows show
+        // "Connected" once the user finishes the manual Load-unpacked dance.
+        if (BrowserExtensionPresence.KindFromClientName(req.ClientName) is { } kind)
+        {
+            _presence.MarkSeen(kind);
+        }
+        return new HelloResponse(
             AppName: SIDM.Core.AppInfo.DisplayName,
             AppVersion: SIDM.Core.AppInfo.Version,
             Capabilities: new[] { "download" });
+    }
 
     private async Task<IpcMessage> OnDownloadAsync(DownloadRequestMessage req, CancellationToken cancellationToken)
     {
