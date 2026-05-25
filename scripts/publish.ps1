@@ -173,6 +173,46 @@ if ($shouldSign) {
 & $vpk @packArgs
 if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
 
+# 4) MSI variant. Same payload, but vpk emits a Windows Installer wizard with
+#    a PerUser/PerMachine chooser — for users who want a system-wide install
+#    or for IT-managed deployments. Adds SIDMSetup.msi alongside the EXE.
+Write-Host "==> vpk pack --msi --instLocation Either" -ForegroundColor Cyan
+$msiArgs = $packArgs + @('--msi', '--instLocation', 'Either')
+& $vpk @msiArgs
+if ($LASTEXITCODE -ne 0) { throw "vpk pack (msi) failed" }
+
+# 5) Build the SetupLauncher and slot it in front of the Velopack EXE so the
+#    user-facing SIDMSetup.exe is the one with the folder-picker UI. The
+#    Velopack one-click EXE is preserved as SIDMSetup-Bootstrap.exe for
+#    silent installs and as the target the launcher actually spawns.
+$velopackExe = Join-Path $OutputDir 'SIDMSetup.exe'
+$bootstrapExe = Join-Path $OutputDir 'SIDMSetup-Bootstrap.exe'
+if (Test-Path $velopackExe) {
+    if (Test-Path $bootstrapExe) { Remove-Item -Force $bootstrapExe }
+    Move-Item $velopackExe $bootstrapExe
+} elseif (-not (Test-Path $bootstrapExe)) {
+    throw "Expected $velopackExe after vpk pack — Velopack output missing."
+}
+
+Write-Host "==> Publishing SIDM.SetupLauncher" -ForegroundColor Cyan
+$launcherStaging = Join-Path $RepoRoot 'publish/launcher'
+if (Test-Path $launcherStaging) { Remove-Item -Recurse -Force $launcherStaging }
+New-Item -ItemType Directory -Path $launcherStaging | Out-Null
+dotnet publish src/SIDM.SetupLauncher/SIDM.SetupLauncher.csproj `
+    -c Release `
+    -r win-x64 `
+    --self-contained `
+    -p:PublishSingleFile=true `
+    -p:Version=$Version `
+    -o $launcherStaging
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish SIDM.SetupLauncher failed" }
+
+Copy-Item (Join-Path $launcherStaging 'SIDMSetup.exe') $OutputDir -Force
+
 Write-Host ""
-Write-Host "==> Done. Installer at:" -ForegroundColor Green
-Get-ChildItem $OutputDir -Filter "*Setup.exe" | ForEach-Object { Write-Host "    $($_.FullName)" }
+Write-Host "==> Done. Install artifacts in $OutputDir:" -ForegroundColor Green
+Write-Host "    SIDMSetup.exe            — folder-picker launcher (front door)" -ForegroundColor Green
+Write-Host "    SIDMSetup-Bootstrap.exe  — Velopack one-click / silent" -ForegroundColor Green
+Get-ChildItem $OutputDir -Filter "*.msi" | ForEach-Object {
+    Write-Host "    $($_.Name.PadRight(24)) — PerUser/PerMachine wizard" -ForegroundColor Green
+}

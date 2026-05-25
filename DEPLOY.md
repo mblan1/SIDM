@@ -30,10 +30,22 @@ cd D:\Workspace\IDM_CLONE
 
 Output appears in `releases/`:
 
-- `SIDMSetup.exe` — what users download
-- `SIDM-<ver>-full.nupkg` — Velopack full package (feed payload)
-- `SIDM-<ver>-delta.nupkg` — delta from the previous version (smaller upgrade)
-- `RELEASES` — manifest pointing the updater at the latest `.nupkg`
+| File | UX | Install path |
+|---|---|---|
+| `SIDMSetup.exe` | Folder-picker launcher → spawns the bootstrap with `--installto`. The default download for end users. | Any folder the user chooses (default `%LocalAppData%\SIDM`). |
+| `SIDMSetup-Bootstrap.exe` | Velopack one-click installer. Honors `--installto <path>` and `--silent` flags for unattended installs. | `%LocalAppData%\SIDM` unless overridden. |
+| `SIDMSetup.msi` | Windows Installer wizard with a PerUser/PerMachine selector — for IT-managed deployments. | `%LocalAppData%\SIDM` (PerUser) or `%ProgramFiles%\Snw\SIDM` (PerMachine, UAC). |
+| `SIDM-<ver>-full.nupkg` + `-delta.nupkg` + `RELEASES` | Update feed payload for Velopack's in-app updater. | n/a |
+
+Three installer artifacts ship side by side so users / IT teams can pick the
+flow that fits — the launcher is the default click-target on the landing page
+and GitHub Release. The bootstrap is exposed for silent / scripted installs
+and is what the launcher actually invokes under the hood.
+
+> The publish script also builds + zips the browser extensions into
+> `publish/sidm/extensions/SIDM-Extension-{Chromium,Firefox}-<ver>.zip` so
+> the in-app extension installer can extract from a local zip on first run
+> without an internet round-trip. Node 18+ on PATH is required.
 
 To bump the version, edit `Version` in `src/SIDM.Core/AppInfo.cs` (or pass
 `-Version 0.2.0` to the script) before running.
