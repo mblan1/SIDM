@@ -97,6 +97,41 @@ dotnet publish src/SIDM.BrowserHost/SIDM.BrowserHost.csproj `
     -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish SIDM.BrowserHost failed" }
 
+# 2.5) Build + zip the browser extensions next to the app so
+#      BrowserExtensionInstaller can extract them on first run without an
+#      internet round-trip. Each extension's npm build emits to dist/ and we
+#      zip that directly. Requires Node 18+ on PATH.
+$extOutDir = Join-Path $publishDir 'extensions'
+New-Item -ItemType Directory -Path $extOutDir -Force | Out-Null
+
+$extensions = @(
+    @{ Name = 'Chromium'; Folder = 'src/SIDM.Extension.Chrome' },
+    @{ Name = 'Firefox';  Folder = 'src/SIDM.Extension.Firefox' }
+)
+foreach ($ext in $extensions) {
+    $extPath = Join-Path $RepoRoot $ext.Folder
+    Write-Host "==> Building $($ext.Name) extension in $($ext.Folder)" -ForegroundColor Cyan
+    Push-Location $extPath
+    try {
+        npm install --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) { throw "npm install failed in $($ext.Folder)" }
+        npm run build
+        if ($LASTEXITCODE -ne 0) { throw "npm run build failed in $($ext.Folder)" }
+
+        $distPath = Join-Path $extPath 'dist'
+        if (-not (Test-Path $distPath)) { throw "Expected $distPath after build" }
+
+        $zipName = "SIDM-Extension-$($ext.Name)-$Version.zip"
+        $zipPath = Join-Path $extOutDir $zipName
+        if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+        Compress-Archive -Path (Join-Path $distPath '*') -DestinationPath $zipPath
+        Write-Host "    wrote $zipPath" -ForegroundColor DarkGray
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 # 3) Velopack pack. Requires the vpk tool — install it once globally with:
 #      dotnet tool install -g vpk
 $vpk = Get-Command vpk -ErrorAction SilentlyContinue

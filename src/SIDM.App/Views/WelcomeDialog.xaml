@@ -38,7 +38,9 @@
                 <StackPanel Margin="0,0,0,12">
                     <TextBlock Text="1. Install the browser extension" FontWeight="SemiBold" />
                     <TextBlock Opacity="0.7" TextWrapping="Wrap" Margin="0,2,0,0"
-                               Text="Chrome / Edge / Brave: load src/SIDM.Extension.Chrome/dist as an unpacked extension. Firefox: about:debugging → Load Temporary Add-on. The native messaging host was registered automatically on install." />
+                               Text="SIDM ships the extension package for Chrome / Edge / Brave / Firefox alongside this app. Click below to pick your browsers and finish the install. The native messaging host is already registered." />
+                    <ui:Button Margin="0,8,0,0" Content="Set up browser extensions"
+                               Appearance="Primary" Click="OnSetUpExtensions" />
                 </StackPanel>
 
                 <StackPanel Margin="0,0,0,12">

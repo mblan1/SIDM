@@ -31,8 +31,16 @@ public sealed record InstallProgress(InstallStep Step, string Message, double Pe
 public sealed class BrowserExtensionInstaller
 {
     /// <summary>
-    /// GitHub Releases URL pattern for the per-browser zip. Filename matches
-    /// what scripts/publish-extensions.ps1 (or the manual workflow) uploads.
+    /// Subfolder, relative to the installed-app directory, where
+    /// scripts/publish.ps1 drops the bundled extension zips so the first-run
+    /// install works offline.
+    /// </summary>
+    private const string LocalPackSubfolder = "extensions";
+
+    /// <summary>
+    /// GitHub Releases URL pattern for the per-browser zip. Used as a fallback
+    /// when no bundled zip is found next to the installed app — e.g. after an
+    /// older build is updated without a corresponding extension refresh.
     /// </summary>
     private const string GitHubReleaseUrl =
         "https://github.com/mblan1/SIDM/releases/download/v{0}/SIDM-Extension-{1}-{0}.zip";
@@ -74,20 +82,34 @@ public sealed class BrowserExtensionInstaller
         IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        // Filename convention from the publish workflow: "Chrome" zip serves
-        // every Chromium-based browser; Firefox has its own gecko-targeted build.
-        var packLabel = browser.Kind.IsChromium() ? "Chrome" : "Firefox";
+        // Filename convention from publish.ps1: Chromium pack serves Chrome /
+        // Edge / Brave; Firefox has its own gecko-targeted build.
+        var packLabel = browser.Kind.IsChromium() ? "Chromium" : "Firefox";
         var version = SIDM.Core.AppInfo.Version;
-        var url = string.Format(GitHubReleaseUrl, version, packLabel);
         var folder = ExtensionFolder(browser.Kind);
 
         try
         {
-            // -- Download ----------------------------------------------------
-            progress?.Report(new InstallProgress(InstallStep.Downloading,
-                $"Downloading {browser.Kind.DisplayName()} extension…"));
-            var zipPath = Path.Combine(Path.GetTempPath(), $"SIDM-Extension-{packLabel}-{version}.zip");
-            await DownloadAsync(url, zipPath, progress, cancellationToken);
+            string zipPath;
+            var localPack = TryResolveLocalPack(packLabel, version);
+            if (localPack is not null)
+            {
+                _logger.LogInformation("Using bundled extension pack {Pack}", localPack);
+                progress?.Report(new InstallProgress(InstallStep.Extracting,
+                    $"Preparing {browser.Kind.DisplayName()} extension…", 0.8));
+                zipPath = localPack;
+            }
+            else
+            {
+                progress?.Report(new InstallProgress(InstallStep.Downloading,
+                    $"Downloading {browser.Kind.DisplayName()} extension…"));
+                var url = string.Format(GitHubReleaseUrl, version, packLabel);
+                zipPath = Path.Combine(Path.GetTempPath(), $"SIDM-Extension-{packLabel}-{version}.zip");
+                _logger.LogInformation("No bundled pack at {Pack}; downloading from {Url}",
+                    Path.Combine(AppContext.BaseDirectory, LocalPackSubfolder,
+                        $"SIDM-Extension-{packLabel}-{version}.zip"), url);
+                await DownloadAsync(url, zipPath, progress, cancellationToken);
+            }
 
             // -- Extract -----------------------------------------------------
             progress?.Report(new InstallProgress(InstallStep.Extracting, "Extracting…", 0.85));
@@ -116,6 +138,20 @@ public sealed class BrowserExtensionInstaller
             progress?.Report(fail);
             return fail;
         }
+    }
+
+    /// <summary>
+    /// Returns the path to the bundled extension zip if publish.ps1 dropped
+    /// one next to the installed app, or null when running from a dev build
+    /// that didn't bundle anything.
+    /// </summary>
+    private static string? TryResolveLocalPack(string packLabel, string version)
+    {
+        var path = Path.Combine(
+            AppContext.BaseDirectory,
+            LocalPackSubfolder,
+            $"SIDM-Extension-{packLabel}-{version}.zip");
+        return File.Exists(path) ? path : null;
     }
 
     private async Task DownloadAsync(

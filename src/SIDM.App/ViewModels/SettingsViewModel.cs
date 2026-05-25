@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SIDM.Core;
 using SIDM.Core.Models;
 
 namespace SIDM.App.ViewModels;
@@ -69,6 +70,8 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<ScheduleRuleRowViewModel> Rules { get; } = new();
 
     public ObservableCollection<CategoryRowViewModel> Categories { get; } = new();
+
+    public ObservableCollection<BrowserExtensionRowViewModel> BrowserExtensions { get; } = new();
 
     public string BandwidthDisplay => BandwidthKiBPerSec <= 0
         ? "Unlimited"
@@ -140,6 +143,54 @@ public partial class ScheduleRuleRowViewModel : ObservableObject
         if (maxConcurrent > 0) parts.Add($"max {maxConcurrent}");
         if (bandwidthKiBps > 0) parts.Add($"{bandwidthKiBps} KiB/s");
         return parts.Count == 0 ? "no override" : string.Join(", ", parts);
+    }
+}
+
+/// <summary>
+/// One row in the Settings → Browser extensions list. Combines whether the
+/// browser is installed on this machine with whether its SIDM extension has
+/// connected over IPC. Rows for non-detected browsers stay in the list so the
+/// user sees the full coverage matrix.
+/// </summary>
+public partial class BrowserExtensionRowViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private bool _isInstalled;
+
+    [ObservableProperty]
+    private bool _isConnected;
+
+    [ObservableProperty]
+    private string _statusText = "";
+
+    public BrowserKind Kind { get; }
+    public string DisplayName => Kind.DisplayName();
+
+    public BrowserExtensionRowViewModel(BrowserKind kind, bool isInstalled, DateTimeOffset? lastSeen)
+    {
+        Kind = kind;
+        Update(isInstalled, lastSeen);
+    }
+
+    public void Update(bool isInstalled, DateTimeOffset? lastSeen)
+    {
+        IsInstalled = isInstalled;
+        IsConnected = lastSeen is { } ts && (DateTimeOffset.UtcNow - ts) < TimeSpan.FromDays(30);
+        StatusText = (isInstalled, IsConnected) switch
+        {
+            (false, _) => "Not detected on this machine",
+            (true, true) => $"Connected (last seen {FormatRelative(lastSeen!.Value)})",
+            (true, false) => "Detected, extension not connected",
+        };
+    }
+
+    private static string FormatRelative(DateTimeOffset ts)
+    {
+        var span = DateTimeOffset.UtcNow - ts;
+        if (span < TimeSpan.FromMinutes(1)) return "just now";
+        if (span < TimeSpan.FromHours(1)) return $"{(int)span.TotalMinutes} min ago";
+        if (span < TimeSpan.FromDays(1)) return $"{(int)span.TotalHours} h ago";
+        return $"{(int)span.TotalDays} d ago";
     }
 }
 

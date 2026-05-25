@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using SIDM.App.Services;
 using SIDM.App.ViewModels;
+using SIDM.Core;
 using SIDM.Core.Persistence;
 using SIDM.VideoGrabber;
 using Wpf.Ui.Controls;
@@ -20,6 +21,8 @@ public partial class SettingsDialog : FluentWindow
     private readonly CrashReportingService _crashReporting;
     private readonly ThemeService _theme;
     private readonly CloseBehaviorService _closeBehavior;
+    private readonly BrowserExtensionInstaller _extensionInstaller;
+    private readonly BrowserExtensionPresence _extensionPresence;
     private readonly IServiceScopeFactory _scopeFactory;
 
     public SettingsViewModel ViewModel { get; } = new();
@@ -33,6 +36,8 @@ public partial class SettingsDialog : FluentWindow
         CrashReportingService crashReporting,
         ThemeService theme,
         CloseBehaviorService closeBehavior,
+        BrowserExtensionInstaller extensionInstaller,
+        BrowserExtensionPresence extensionPresence,
         IServiceScopeFactory scopeFactory)
     {
         InitializeComponent();
@@ -44,6 +49,8 @@ public partial class SettingsDialog : FluentWindow
         _crashReporting = crashReporting;
         _theme = theme;
         _closeBehavior = closeBehavior;
+        _extensionInstaller = extensionInstaller;
+        _extensionPresence = extensionPresence;
         _scopeFactory = scopeFactory;
         DataContext = ViewModel;
 
@@ -61,6 +68,52 @@ public partial class SettingsDialog : FluentWindow
 
         _ = LoadRulesAsync();
         _ = LoadCategoriesAsync();
+        LoadBrowserExtensions();
+
+        // Live-update the rows when the extension first connects while
+        // Settings is open. Unsubscribe on Close so the dialog can be GC'd.
+        _extensionPresence.FirstSeen += OnExtensionFirstSeen;
+        Closed += (_, _) => _extensionPresence.FirstSeen -= OnExtensionFirstSeen;
+    }
+
+    /// <summary>
+    /// Builds one row per supported BrowserKind, marking each as installed
+    /// (per BrowserDetector) and connected (per BrowserExtensionPresence).
+    /// Non-detected browsers stay in the list so the user can see the full
+    /// coverage matrix at a glance.
+    /// </summary>
+    private void LoadBrowserExtensions()
+    {
+        var installed = BrowserDetector.DetectInstalled()
+            .Select(b => b.Kind)
+            .ToHashSet();
+        ViewModel.BrowserExtensions.Clear();
+        foreach (var kind in Enum.GetValues<BrowserKind>())
+        {
+            ViewModel.BrowserExtensions.Add(new BrowserExtensionRowViewModel(
+                kind,
+                isInstalled: installed.Contains(kind),
+                lastSeen: _extensionPresence.GetLastSeen(kind)));
+        }
+    }
+
+    private void OnExtensionFirstSeen(BrowserKind kind)
+    {
+        // Marshal back to the UI thread — FirstSeen fires from the IPC worker.
+        Dispatcher.Invoke(() =>
+        {
+            var row = ViewModel.BrowserExtensions.FirstOrDefault(r => r.Kind == kind);
+            row?.Update(isInstalled: row.IsInstalled, lastSeen: _extensionPresence.GetLastSeen(kind));
+        });
+    }
+
+    private void OnManageBrowserExtensions(object sender, RoutedEventArgs e)
+    {
+        var dlg = new BrowserExtensionInstallDialog(_extensionInstaller, _extensionPresence) { Owner = this };
+        dlg.ShowDialog();
+        // Refresh in case install state changed (e.g., extension was newly
+        // sideloaded between Open and Close of the inner dialog).
+        LoadBrowserExtensions();
     }
 
     private string BuildResolvedPathStatus()
