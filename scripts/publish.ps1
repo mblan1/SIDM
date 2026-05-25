@@ -97,6 +97,41 @@ dotnet publish src/SIDM.BrowserHost/SIDM.BrowserHost.csproj `
     -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish SIDM.BrowserHost failed" }
 
+# 2.5) Build + zip the browser extensions next to the app so
+#      BrowserExtensionInstaller can extract them on first run without an
+#      internet round-trip. Each extension's npm build emits to dist/ and we
+#      zip that directly. Requires Node 18+ on PATH.
+$extOutDir = Join-Path $publishDir 'extensions'
+New-Item -ItemType Directory -Path $extOutDir -Force | Out-Null
+
+$extensions = @(
+    @{ Name = 'Chromium'; Folder = 'src/SIDM.Extension.Chrome' },
+    @{ Name = 'Firefox';  Folder = 'src/SIDM.Extension.Firefox' }
+)
+foreach ($ext in $extensions) {
+    $extPath = Join-Path $RepoRoot $ext.Folder
+    Write-Host "==> Building $($ext.Name) extension in $($ext.Folder)" -ForegroundColor Cyan
+    Push-Location $extPath
+    try {
+        npm install --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) { throw "npm install failed in $($ext.Folder)" }
+        npm run build
+        if ($LASTEXITCODE -ne 0) { throw "npm run build failed in $($ext.Folder)" }
+
+        $distPath = Join-Path $extPath 'dist'
+        if (-not (Test-Path $distPath)) { throw "Expected $distPath after build" }
+
+        $zipName = "SIDM-Extension-$($ext.Name)-$Version.zip"
+        $zipPath = Join-Path $extOutDir $zipName
+        if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+        Compress-Archive -Path (Join-Path $distPath '*') -DestinationPath $zipPath
+        Write-Host "    wrote $zipPath" -ForegroundColor DarkGray
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 # 3) Velopack pack. Requires the vpk tool — install it once globally with:
 #      dotnet tool install -g vpk
 $vpk = Get-Command vpk -ErrorAction SilentlyContinue
@@ -138,6 +173,46 @@ if ($shouldSign) {
 & $vpk @packArgs
 if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
 
+# 4) MSI variant. Same payload, but vpk emits a Windows Installer wizard with
+#    a PerUser/PerMachine chooser — for users who want a system-wide install
+#    or for IT-managed deployments. Adds SIDMSetup.msi alongside the EXE.
+Write-Host "==> vpk pack --msi --instLocation Either" -ForegroundColor Cyan
+$msiArgs = $packArgs + @('--msi', '--instLocation', 'Either')
+& $vpk @msiArgs
+if ($LASTEXITCODE -ne 0) { throw "vpk pack (msi) failed" }
+
+# 5) Build the SetupLauncher and slot it in front of the Velopack EXE so the
+#    user-facing SIDMSetup.exe is the one with the folder-picker UI. The
+#    Velopack one-click EXE is preserved as SIDMSetup-Bootstrap.exe for
+#    silent installs and as the target the launcher actually spawns.
+$velopackExe = Join-Path $OutputDir 'SIDMSetup.exe'
+$bootstrapExe = Join-Path $OutputDir 'SIDMSetup-Bootstrap.exe'
+if (Test-Path $velopackExe) {
+    if (Test-Path $bootstrapExe) { Remove-Item -Force $bootstrapExe }
+    Move-Item $velopackExe $bootstrapExe
+} elseif (-not (Test-Path $bootstrapExe)) {
+    throw "Expected $velopackExe after vpk pack — Velopack output missing."
+}
+
+Write-Host "==> Publishing SIDM.SetupLauncher" -ForegroundColor Cyan
+$launcherStaging = Join-Path $RepoRoot 'publish/launcher'
+if (Test-Path $launcherStaging) { Remove-Item -Recurse -Force $launcherStaging }
+New-Item -ItemType Directory -Path $launcherStaging | Out-Null
+dotnet publish src/SIDM.SetupLauncher/SIDM.SetupLauncher.csproj `
+    -c Release `
+    -r win-x64 `
+    --self-contained `
+    -p:PublishSingleFile=true `
+    -p:Version=$Version `
+    -o $launcherStaging
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish SIDM.SetupLauncher failed" }
+
+Copy-Item (Join-Path $launcherStaging 'SIDMSetup.exe') $OutputDir -Force
+
 Write-Host ""
-Write-Host "==> Done. Installer at:" -ForegroundColor Green
-Get-ChildItem $OutputDir -Filter "*Setup.exe" | ForEach-Object { Write-Host "    $($_.FullName)" }
+Write-Host "==> Done. Install artifacts in $OutputDir:" -ForegroundColor Green
+Write-Host "    SIDMSetup.exe            — folder-picker launcher (front door)" -ForegroundColor Green
+Write-Host "    SIDMSetup-Bootstrap.exe  — Velopack one-click / silent" -ForegroundColor Green
+Get-ChildItem $OutputDir -Filter "*.msi" | ForEach-Object {
+    Write-Host "    $($_.Name.PadRight(24)) — PerUser/PerMachine wizard" -ForegroundColor Green
+}

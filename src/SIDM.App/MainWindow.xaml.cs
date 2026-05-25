@@ -177,6 +177,13 @@ public partial class MainWindow : FluentWindow
         welcome.ShowDialog();
         await _onboarding.MarkCompletedAsync();
 
+        if (welcome.ShouldOpenExtensionInstaller)
+        {
+            // Reuse the same dialog path as the toolbar/banner so there's a
+            // single code path for opening the extension installer.
+            OnOpenBrowserExtensionDialog(this, new RoutedEventArgs());
+        }
+
         if (welcome.ShouldOpenSettings)
         {
             // Reuse the existing Settings command on the downloads VM so
