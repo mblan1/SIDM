@@ -119,12 +119,11 @@ public sealed class BrowserExtensionInstaller
 
             // -- Open browser ------------------------------------------------
             progress?.Report(new InstallProgress(InstallStep.OpeningBrowser, "Opening browser…", 0.95));
-            OpenInstallPage(browser, folder);
+            OpenExtensionPage(browser);
 
-            // Also pop Explorer at the folder so the user can drag/select it
-            // for "Load unpacked" / "Load Temporary Add-on" without hunting.
-            try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true }); }
-            catch (Exception ex) { _logger.LogDebug(ex, "Could not open Explorer for {Folder}", folder); }
+            // (Explorer is intentionally NOT opened here — the guide UI
+            // exposes an "Open folder" button per step, so users who want
+            // to see the extracted folder can ask for it explicitly.)
 
             var done = new InstallProgress(InstallStep.Complete,
                 $"Extension ready in {folder}. Finish the install in {browser.Kind.DisplayName()}.", 1.0);
@@ -186,26 +185,16 @@ public sealed class BrowserExtensionInstaller
 
     /// <summary>
     /// Opens the right browser-internal URL to finish the install. For
-    /// Chromium browsers we go to <c>chrome://extensions/</c>; for Firefox
-    /// to <c>about:debugging</c>. When store URLs are populated we'll prefer
+    /// Chromium browsers we use the browser-specific scheme so the
+    /// breadcrumb in the address bar matches the chrome the user sees
+    /// (edge://… on Edge, brave://… on Brave). For Firefox we go to
+    /// <c>about:debugging</c>. When store URLs are populated we'll prefer
     /// those instead.
     /// </summary>
-    private static void OpenInstallPage(DetectedBrowser browser, string extractedFolder)
+    public static void OpenExtensionPage(DetectedBrowser browser)
     {
-        string url;
-        if (browser.Kind.IsChromium())
-        {
-            url = !string.IsNullOrEmpty(ChromiumStoreUrl)
-                ? ChromiumStoreUrl
-                : "chrome://extensions/";
-        }
-        else
-        {
-            url = !string.IsNullOrEmpty(FirefoxStoreUrl)
-                ? FirefoxStoreUrl
-                : "about:debugging#/runtime/this-firefox";
-        }
-
+        if (string.IsNullOrEmpty(browser.ExecutablePath)) return;
+        var url = GetExtensionPageUrl(browser.Kind);
         // Launch the specific browser exe so the page opens in the browser
         // the user clicked Install for (not whatever the default browser is).
         Process.Start(new ProcessStartInfo
@@ -215,4 +204,33 @@ public sealed class BrowserExtensionInstaller
             UseShellExecute = false,
         });
     }
+
+    /// <summary>
+    /// Returns the URL the guide opens for the given browser. Prefers the
+    /// store listing once published (one-click install path) and otherwise
+    /// the browser's internal extensions page so the user can sideload the
+    /// unpacked build.
+    /// </summary>
+    public static string GetExtensionPageUrl(BrowserKind kind)
+    {
+        if (kind.IsChromium() && !string.IsNullOrEmpty(ChromiumStoreUrl)) return ChromiumStoreUrl;
+        if (kind == BrowserKind.Firefox && !string.IsNullOrEmpty(FirefoxStoreUrl)) return FirefoxStoreUrl;
+        return kind switch
+        {
+            BrowserKind.Chrome => "chrome://extensions/",
+            BrowserKind.Edge => "edge://extensions/",
+            BrowserKind.Brave => "brave://extensions/",
+            BrowserKind.Firefox => "about:debugging#/runtime/this-firefox",
+            _ => "chrome://extensions/",
+        };
+    }
+
+    /// <summary>
+    /// True when this browser will install the extension with a single click
+    /// (because we have a published store listing). The guide collapses to a
+    /// one-step "click Add" panel in that case.
+    /// </summary>
+    public static bool HasOneClickInstall(BrowserKind kind) =>
+        (kind.IsChromium() && !string.IsNullOrEmpty(ChromiumStoreUrl)) ||
+        (kind == BrowserKind.Firefox && !string.IsNullOrEmpty(FirefoxStoreUrl));
 }

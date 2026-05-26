@@ -19,7 +19,11 @@ public static class NativeHostRegistration
 {
     public const string HostId = NativeHostManifest.HostId;
 
-    private const string FallbackChromiumExtensionId = "paaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    // Deterministic ID derived from the RSA public key pinned in the Chrome
+    // extension's manifest.json under "key". Chrome computes the ID as the
+    // first 16 bytes of SHA-256(key), mapped 0–15 → a–p. Keep this in sync
+    // with src/SIDM.Extension.Chrome/manifest.json.
+    private const string FallbackChromiumExtensionId = "keoeaiokoenefbpaikgohbknjcfjgigc";
     private const string FirefoxExtensionId = "sidm@snw.dev";
 
     private static readonly (string Name, string KeyPath, BrowserKind Kind)[] Browsers =

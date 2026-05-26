@@ -91,6 +91,23 @@ public partial class App : Application
         Log.Information("Starting {App} v{Version}", AppInfo.DisplayName, AppInfo.Version);
         await _host!.StartAsync();
 
+        // Re-run NMH registration on every startup. Idempotent — writes the
+        // same JSON + registry keys. Needed because Velopack's WithFirstRun
+        // hook only fires on FRESH installs; an in-place update that
+        // changes the allowed extension ID (or the BrowserHost.exe path)
+        // would otherwise leave a stale manifest on disk and the browser
+        // extension would fail with "Access to the specified native
+        // messaging host is forbidden."
+        try
+        {
+            var registration = NativeHostRegistration.Register();
+            Log.Debug("NMH registration refreshed: {Message}", registration.Message);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "NMH registration refresh failed");
+        }
+
         // Apply the user's theme BEFORE the main window is created so the
         // first paint is the right color — flipping themes after Show()
         // produces a brief flash of the wrong theme.

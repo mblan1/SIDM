@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SIDM (Snw Internet Download Manager)",
   "short_name": "SIDM",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "description": "Capture downloads and hand them to the SIDM desktop app for fast multi-segment downloading.",
   "author": "Snw",
   "homepage_url": "https://github.com/mblan1/SIDM",

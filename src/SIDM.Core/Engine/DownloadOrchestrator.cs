@@ -54,7 +54,8 @@ public sealed class DownloadOrchestrator
     public async Task<DownloadResult> ExecuteAsync(
         DownloadRequest request,
         ISegmentProgressSink? progressSink = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<IReadOnlyList<SegmentTask>>? onSegmentsPlanned = null)
     {
         progressSink ??= NullProgressSink.Instance;
 
@@ -140,6 +141,17 @@ public sealed class DownloadOrchestrator
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Failed(DownloadFailureKind.IoError, ex.Message, [], ex);
+        }
+
+        // Surface the planned segment shape so callers can persist a
+        // skeleton row per segment BEFORE workers start writing bytes.
+        // Without this the UI's chunk grid stays empty until the download
+        // ends (PersistResultAsync) and the SegmentProgressWriter's
+        // UPDATEs miss because the rows don't exist yet.
+        if (onSegmentsPlanned is not null)
+        {
+            try { onSegmentsPlanned(initialTasks); }
+            catch (Exception ex) { _logger.LogWarning(ex, "onSegmentsPlanned callback threw"); }
         }
 
         try

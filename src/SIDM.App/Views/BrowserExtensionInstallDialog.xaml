@@ -6,8 +6,8 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  mc:Ignorable="d"
                  Title="Install browser extension"
-                 Height="560"
-                 Width="560"
+                 Height="640"
+                 Width="640"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
                  Icon="pack://application:,,,/Resources/sidm.png"
@@ -21,55 +21,178 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="Install browser extension" />
+        <ui:TitleBar x:Name="DialogTitleBar" Grid.Row="0" Title="Install browser extension" />
 
         <Grid Grid.Row="1" Margin="24,8,24,24">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Margin="0,0,0,12">
-                <TextBlock Text="Capture browser downloads automatically" FontWeight="SemiBold" FontSize="14" />
-                <TextBlock Margin="0,4,0,0" Opacity="0.7" FontSize="12" TextWrapping="Wrap"
-                           Text="Install the SIDM extension in any browser to redirect its downloads into SIDM. We'll fetch the right pack, unzip it for you, and open the browser to the install page." />
-            </StackPanel>
+            <!-- ============================================================
+                 List view — shown by default. Lets the user pick which
+                 browser to install into.
+                 ============================================================ -->
+            <Grid x:Name="ListView">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <ItemsControl Grid.Row="1" x:Name="BrowsersList">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Background="{DynamicResource SubtleFillColorTertiaryBrush}"
-                                CornerRadius="8" Padding="12" Margin="0,0,0,8">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                    <TextBlock Text="Capture browser downloads automatically" FontWeight="SemiBold" FontSize="14" />
+                    <TextBlock Margin="0,4,0,0" Opacity="0.7" FontSize="12" TextWrapping="Wrap"
+                               Text="Install the SIDM extension in any browser to redirect its downloads into SIDM. We'll fetch the right pack, unzip it, and walk you through the browser steps." />
+                </StackPanel>
 
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="13" />
-                                    <TextBlock Text="{Binding StatusLine}"
-                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                               FontSize="11" Margin="0,2,0,0" />
-                                </StackPanel>
+                <ItemsControl Grid.Row="1" x:Name="BrowsersList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource SubtleFillColorTertiaryBrush}"
+                                    CornerRadius="8" Padding="12" Margin="0,0,0,8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                <ui:Button Grid.Column="1"
-                                           VerticalAlignment="Center"
-                                           Content="{Binding ButtonLabel}"
-                                           Appearance="{Binding ButtonAppearance}"
-                                           IsEnabled="{Binding IsButtonEnabled}"
-                                           Tag="{Binding}"
-                                           Click="OnInstallClick" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="13" />
+                                        <TextBlock Text="{Binding StatusLine}"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   FontSize="11" Margin="0,2,0,0" />
+                                    </StackPanel>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-                <ui:Button Content="Close" Appearance="Primary" Click="OnClose" IsCancel="True" IsDefault="True" />
-            </StackPanel>
+                                    <ui:Button Grid.Column="1"
+                                               VerticalAlignment="Center"
+                                               Content="{Binding ButtonLabel}"
+                                               Appearance="{Binding ButtonAppearance}"
+                                               IsEnabled="{Binding IsButtonEnabled}"
+                                               Tag="{Binding}"
+                                               Click="OnInstallClick" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                    <ui:Button Content="Close" Appearance="Primary" Click="OnClose" IsCancel="True" IsDefault="True" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ============================================================
+                 Guide view — appears after the user clicks Install on a
+                 browser. Same area; ListView is collapsed while this is
+                 visible. Populated from code-behind based on browser kind.
+                 ============================================================ -->
+            <Grid x:Name="GuideView" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                    <TextBlock x:Name="GuideHeader"
+                               FontWeight="SemiBold" FontSize="14"
+                               Text="Install in browser" />
+                    <TextBlock x:Name="GuideSubheader"
+                               Margin="0,4,0,0" Opacity="0.7" FontSize="12" TextWrapping="Wrap"
+                               Text="Follow the steps below. This row flips to 'Connected' automatically once the extension says hello." />
+                    <Border x:Name="GuideStatusBanner"
+                            Margin="0,8,0,0" Padding="10,6"
+                            CornerRadius="6"
+                            Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                            Visibility="Collapsed">
+                        <TextBlock x:Name="GuideStatusText"
+                                   FontSize="12"
+                                   Text="" />
+                    </Border>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="GuideStepsList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SubtleFillColorTertiaryBrush}"
+                                        CornerRadius="8" Padding="12" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border Background="{Binding BadgeBackground}"
+                                                    Width="22" Height="22" CornerRadius="11">
+                                                <TextBlock Text="{Binding Number}"
+                                                           Foreground="White"
+                                                           FontWeight="SemiBold" FontSize="11"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
+                                            </Border>
+                                            <TextBlock Text="{Binding Title}"
+                                                       FontWeight="SemiBold" FontSize="13"
+                                                       VerticalAlignment="Center"
+                                                       Margin="10,0,0,0"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Description}"
+                                                   Opacity="0.85" FontSize="12"
+                                                   TextWrapping="Wrap"
+                                                   Margin="32,4,0,0" />
+                                        <Grid Visibility="{Binding PathVisibility}"
+                                              Margin="32,8,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0"
+                                                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="8,4"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Path}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Path}" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Margin="6,0,0,0">
+                                                <ui:Button Content="Copy"
+                                                           Click="OnCopyPath"
+                                                           Tag="{Binding Path}"
+                                                           Margin="0,0,4,0" />
+                                                <ui:Button Content="Open folder"
+                                                           Click="OnOpenFolder"
+                                                           Tag="{Binding Path}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Grid Grid.Row="2" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:Button Grid.Column="0"
+                               Content="Back"
+                               Appearance="Secondary"
+                               Click="OnBackToList" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <ui:Button Content="Open page in browser"
+                                   Click="OnOpenExtensionPage"
+                                   Margin="0,0,8,0" />
+                        <ui:Button Content="Close"
+                                   Appearance="Primary"
+                                   Click="OnClose" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
         </Grid>
     </Grid>
 </ui:FluentWindow>

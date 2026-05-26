@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace SIDM.SetupLauncher;
 
@@ -7,12 +8,21 @@ internal static class Program
 {
     private const string BootstrapExeName = "SIDMSetup-Bootstrap.exe";
 
+    /// <summary>
+    /// Velopack writes this when it installs. <c>packId</c> in publish.ps1 is
+    /// <c>SIDM</c>, so the key name is <c>SIDM</c>. Per-user installs land in
+    /// HKCU; an admin/MSI install would land in HKLM — we check both.
+    /// </summary>
+    private const string UninstallSubKey =
+        @"Software\Microsoft\Windows\CurrentVersion\Uninstall\SIDM";
+
     [STAThread]
     private static int Main()
     {
         ApplicationConfiguration.Initialize();
 
-        var defaultPath = Path.Combine(
+        var existingInstall = TryFindExistingInstall();
+        var defaultPath = existingInstall ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "SIDM");
 
@@ -28,7 +38,7 @@ internal static class Program
             return 2;
         }
 
-        using var form = new LauncherForm(defaultPath);
+        using var form = new LauncherForm(defaultPath, isUpdate: existingInstall is not null);
         var result = form.ShowDialog();
         if (result != DialogResult.OK || string.IsNullOrWhiteSpace(form.ChosenPath))
         {
@@ -66,6 +76,44 @@ internal static class Program
         var candidate = Path.Combine(AppContext.BaseDirectory, BootstrapExeName);
         return File.Exists(candidate) ? candidate : null;
     }
+
+    /// <summary>
+    /// Returns the folder the previous SIDM install lives in, or null if
+    /// nothing's installed. Reads the standard Windows Uninstall registry —
+    /// Velopack writes <c>InstallLocation</c> there at install time. We
+    /// require the folder to still exist; a stale registry entry pointing at
+    /// a deleted folder counts as "not installed" so the user falls back to
+    /// the default path.
+    /// </summary>
+    private static string? TryFindExistingInstall()
+    {
+        foreach (var root in new[] { Registry.CurrentUser, Registry.LocalMachine })
+        {
+            try
+            {
+                using var key = root.OpenSubKey(UninstallSubKey);
+                if (key?.GetValue("InstallLocation") is string raw
+                    && !string.IsNullOrWhiteSpace(raw))
+                {
+                    // Velopack pads InstallLocation with trailing NUL bytes
+                    // (0x00) — not spaces. string.Trim() only strips Unicode
+                    // whitespace, so NULs survive and Directory.Exists
+                    // rejects the resulting path. Strip NULs first.
+                    var loc = raw.Trim('\0').Trim();
+                    if (loc.Length > 0 && Directory.Exists(loc))
+                    {
+                        return loc;
+                    }
+                }
+            }
+            catch
+            {
+                // Registry access can fail on locked-down machines; the
+                // launcher should still work, just without auto-detect.
+            }
+        }
+        return null;
+    }
 }
 
 internal sealed class LauncherForm : Form
@@ -74,69 +122,99 @@ internal sealed class LauncherForm : Form
 
     public string? ChosenPath { get; private set; }
 
-    public LauncherForm(string defaultPath)
+    public LauncherForm(string defaultPath, bool isUpdate = false)
     {
-        Text = "Install SIDM";
-        Width = 520;
-        Height = 220;
+        Text = isUpdate ? "Update SIDM" : "Install SIDM";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false;
         MinimizeBox = false;
 
+        // Layout is stacked top-down. Heights are measured up front (Label
+        // wrapping isn't known until layout, so positions hard-coded against
+        // a single-line hint break the moment the text grows).
+        const int margin = 16;
+        const int contentWidth = 488;          // ClientSize.Width - 2*margin
+        const int pathBoxWidth = 380;
+        const int browseWidth = 92;
+        const int actionButtonWidth = 80;
+        const int rowGap = 12;
+
+        var headingFont = new System.Drawing.Font(Font.FontFamily, 11, System.Drawing.FontStyle.Bold);
+        var headingText = isUpdate
+            ? "SIDM is already installed. Update it in place?"
+            : "Where should SIDM be installed?";
+        var hintText = isUpdate
+            ? "Updating in place keeps your downloads, settings, and database."
+            : "The default puts SIDM in your user profile so no admin prompt is needed.";
+
+        var headingSize = TextRenderer.MeasureText(headingText, headingFont,
+            new System.Drawing.Size(contentWidth, 0), TextFormatFlags.WordBreak);
+        var hintSize = TextRenderer.MeasureText(hintText, Font,
+            new System.Drawing.Size(contentWidth, 0), TextFormatFlags.WordBreak);
+
         var heading = new Label
         {
-            Text = "Where should SIDM be installed?",
-            Font = new System.Drawing.Font(Font.FontFamily, 11, System.Drawing.FontStyle.Bold),
-            AutoSize = true,
-            Left = 16,
-            Top = 16,
+            Text = headingText,
+            Font = headingFont,
+            AutoSize = false,
+            Size = new System.Drawing.Size(contentWidth, headingSize.Height),
+            Left = margin,
+            Top = margin,
         };
 
+        var hintTop = heading.Bottom + 6;
         var hint = new Label
         {
-            Text = "The default puts SIDM in your user profile so no admin prompt is needed.",
-            AutoSize = true,
-            Left = 16,
-            Top = 44,
+            Text = hintText,
+            AutoSize = false,
+            Size = new System.Drawing.Size(contentWidth, hintSize.Height),
+            Left = margin,
+            Top = hintTop,
             ForeColor = System.Drawing.Color.DimGray,
         };
 
+        var pathRowTop = hint.Bottom + rowGap;
         _pathBox = new TextBox
         {
-            Left = 16,
-            Top = 76,
-            Width = 380,
+            Left = margin,
+            Top = pathRowTop,
+            Width = pathBoxWidth,
             Text = defaultPath,
         };
 
         var browse = new Button
         {
             Text = "Browse...",
-            Left = 404,
-            Top = 75,
-            Width = 90,
+            Left = margin + pathBoxWidth + 8,
+            Top = pathRowTop - 1,            // align baseline with TextBox
+            Width = browseWidth,
         };
         browse.Click += OnBrowse;
 
+        var actionRowTop = _pathBox.Bottom + rowGap + 8;
+        var cancel = new Button
+        {
+            Text = "Cancel",
+            Left = margin + contentWidth - actionButtonWidth,
+            Top = actionRowTop,
+            Width = actionButtonWidth,
+            DialogResult = DialogResult.Cancel,
+        };
+
         var install = new Button
         {
-            Text = "Install",
-            Left = 318,
-            Top = 130,
-            Width = 80,
+            Text = isUpdate ? "Update" : "Install",
+            Left = cancel.Left - actionButtonWidth - 8,
+            Top = actionRowTop,
+            Width = actionButtonWidth,
             DialogResult = DialogResult.OK,
         };
         install.Click += OnInstall;
 
-        var cancel = new Button
-        {
-            Text = "Cancel",
-            Left = 406,
-            Top = 130,
-            Width = 80,
-            DialogResult = DialogResult.Cancel,
-        };
+        ClientSize = new System.Drawing.Size(
+            margin + contentWidth + margin,
+            actionRowTop + cancel.Height + margin);
 
         Controls.Add(heading);
         Controls.Add(hint);

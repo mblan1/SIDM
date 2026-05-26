@@ -158,7 +158,51 @@ public sealed class DownloadEngine
         DownloadResult result;
         try
         {
-            result = await _orchestrator.ExecuteAsync(request, sink, cts.Token);
+            // The orchestrator fires this once the planned segment shape is
+            // known (after probe, or immediately when resuming). Persist a
+            // skeleton row per segment so:
+            //   - the UI's chunk grid renders right away (the polling loop
+            //     reads them via repo.GetAsync and rebuilds SegmentRows),
+            //   - SegmentProgressWriter's per-tick UPDATE statements match
+            //     real rows (instead of silently affecting 0 rows because
+            //     no skeleton exists yet),
+            //   - the bus path's _segmentByIdx fills in from the first poll,
+            //     so per-segment Report() events stop being discarded.
+            void PersistPlannedSegments(IReadOnlyList<SegmentTask> planned)
+            {
+                try
+                {
+                    var skeleton = planned.Select(t => new Segment
+                    {
+                        Idx = t.Index,
+                        StartByte = t.StartByte,
+                        EndByte = t.EndByte,
+                        BytesDownloaded = t.BytesAlreadyDownloaded,
+                        Status = SegmentStatus.Pending,
+                    }).ToArray();
+                    // Fire-and-forget: the orchestrator continues on the
+                    // worker thread while this scope writes to SQLite.
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await using var scope = _scopeFactory.CreateAsyncScope();
+                            var innerRepo = scope.ServiceProvider.GetRequiredService<IDownloadRepository>();
+                            await innerRepo.ReplaceSegmentsAsync(downloadId, skeleton, cts.Token);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to persist planned segments for {Id}", downloadId);
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "PersistPlannedSegments inline failure for {Id}", downloadId);
+                }
+            }
+
+            result = await _orchestrator.ExecuteAsync(request, sink, cts.Token, PersistPlannedSegments);
         }
         catch (Exception ex)
         {

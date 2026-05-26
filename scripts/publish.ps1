@@ -152,7 +152,7 @@ $packArgs = @(
     '--packDir', $publishDir,
     '--mainExe', 'SIDM.App.exe',
     '--packTitle', 'Snw Internet Download Manager',
-    '--packAuthors', 'snw.dev',
+    '--packAuthors', 'snw',
     '--outputDir', $OutputDir
 )
 
@@ -179,19 +179,26 @@ if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
 Write-Host "==> vpk pack --msi --instLocation Either" -ForegroundColor Cyan
 $msiArgs = $packArgs + @('--msi', '--instLocation', 'Either')
 & $vpk @msiArgs
-if ($LASTEXITCODE -ne 0) { throw "vpk pack (msi) failed" }
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "   (skipping MSI variant — current vpk version does not support --msi)" -ForegroundColor Yellow
+    $global:LASTEXITCODE = 0
+}
 
 # 5) Build the SetupLauncher and slot it in front of the Velopack EXE so the
 #    user-facing SIDMSetup.exe is the one with the folder-picker UI. The
 #    Velopack one-click EXE is preserved as SIDMSetup-Bootstrap.exe for
 #    silent installs and as the target the launcher actually spawns.
-$velopackExe = Join-Path $OutputDir 'SIDMSetup.exe'
 $bootstrapExe = Join-Path $OutputDir 'SIDMSetup-Bootstrap.exe'
-if (Test-Path $velopackExe) {
+$velopackExeCandidates = @(
+    (Join-Path $OutputDir 'SIDMSetup.exe'),
+    (Join-Path $OutputDir 'SIDM-win-Setup.exe')
+)
+$velopackExe = $velopackExeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($velopackExe) {
     if (Test-Path $bootstrapExe) { Remove-Item -Force $bootstrapExe }
     Move-Item $velopackExe $bootstrapExe
 } elseif (-not (Test-Path $bootstrapExe)) {
-    throw "Expected $velopackExe after vpk pack — Velopack output missing."
+    throw "Expected Velopack setup exe in $OutputDir (looked for: $($velopackExeCandidates -join ', '))."
 }
 
 Write-Host "==> Publishing SIDM.SetupLauncher" -ForegroundColor Cyan
@@ -210,7 +217,7 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish SIDM.SetupLauncher failed" }
 Copy-Item (Join-Path $launcherStaging 'SIDMSetup.exe') $OutputDir -Force
 
 Write-Host ""
-Write-Host "==> Done. Install artifacts in $OutputDir:" -ForegroundColor Green
+Write-Host "==> Done. Install artifacts in ${OutputDir}:" -ForegroundColor Green
 Write-Host "    SIDMSetup.exe            — folder-picker launcher (front door)" -ForegroundColor Green
 Write-Host "    SIDMSetup-Bootstrap.exe  — Velopack one-click / silent" -ForegroundColor Green
 Get-ChildItem $OutputDir -Filter "*.msi" | ForEach-Object {

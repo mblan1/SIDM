@@ -284,6 +284,52 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             : vm.FileName;
         var targetPath = Path.Combine(vm.TargetFolder, fileName);
 
+        // Collision check — the user picked a name that's already taken by
+        // either a file on disk, an in-flight .sidmpart, or an existing
+        // SIDM row pointing at this exact path. Prompt before persisting.
+        var existingRow = Rows.FirstOrDefault(r =>
+            string.Equals(r.TargetPath, targetPath, StringComparison.OrdinalIgnoreCase));
+        var partPath = targetPath + ".sidmpart";
+        var hasCollision = File.Exists(targetPath)
+                           || File.Exists(partPath)
+                           || existingRow is not null;
+        if (hasCollision)
+        {
+            var suggested = FindAvailableTargetPath(targetPath);
+            var prompt = new Views.FileExistsDialog(
+                fileName,
+                targetPath,
+                Path.GetFileName(suggested))
+            {
+                Owner = Application.Current?.MainWindow,
+            };
+            prompt.ShowDialog();
+
+            switch (prompt.Choice)
+            {
+                case Views.FileExistsChoice.Cancel:
+                    return null;
+
+                case Views.FileExistsChoice.SaveAsNew:
+                    targetPath = suggested;
+                    fileName = Path.GetFileName(targetPath);
+                    break;
+
+                case Views.FileExistsChoice.Replace:
+                    // Existing SIDM row first — that handles its own engine
+                    // pause + .sidmpart delete + DB cleanup.
+                    if (existingRow is not null)
+                    {
+                        await RemoveRowAsync(existingRow, deleteFile: true);
+                    }
+                    // Then any leftover bare files (could be a row we
+                    // already removed, or something we never tracked).
+                    await TryDeleteWithRetryAsync(targetPath);
+                    await TryDeleteWithRetryAsync(partPath);
+                    break;
+            }
+        }
+
         var headers = seed is null ? null : MergeHeaders(seed.Headers, seed.Referer, seed.UserAgent);
 
         // Streaming-manifest URLs always win over yt-dlp detection: a URL
@@ -345,13 +391,25 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
     private void ShowProgressDialog(DownloadRowViewModel row)
     {
         var owner = Application.Current?.MainWindow;
-        var dlg = new DownloadProgressDialog(row, _engine)
+        var dlg = new DownloadProgressDialog(
+            row,
+            _engine,
+            onCancelConfirmed: () => RemoveRowAsync(row, deleteFile: true))
         {
             Owner = owner,
         };
         dlg.Show();
         dlg.Activate();
     }
+
+    /// <summary>
+    /// Public entry-point for "cancel + delete" used by the per-download
+    /// progress dialog. Internally just <see cref="RemoveRowAsync"/> with
+    /// the delete-file flag on — exposed so external callers don't have to
+    /// reach into the private removal helper.
+    /// </summary>
+    public Task CancelAndDeleteAsync(DownloadRowViewModel row) =>
+        RemoveRowAsync(row, deleteFile: true);
 
     /// <summary>
     /// Picks the set of rows to act on for a toolbar bulk command. Preference:
@@ -418,6 +476,16 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
         var path = row.TargetPath;
         var fileName = row.FileName;
 
+        // For an in-flight cancel, the engine's writer still owns the
+        // .sidmpart handle for a few hundred ms after Pause returns. Wait
+        // for the engine to drop the active CancellationTokenSource so the
+        // file handles release before we try to delete.
+        if (deleteFile && _engine.IsActive(row.Id))
+        {
+            _engine.Pause(row.Id);
+            await WaitForEngineToReleaseAsync(row.Id, timeoutMs: 3000);
+        }
+
         _queue.Remove(row.Id);
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
@@ -429,17 +497,95 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 
         if (deleteFile && !string.IsNullOrWhiteSpace(path))
         {
-            try
-            {
-                if (File.Exists(path)) File.Delete(path);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to delete downloaded file at {Path}", path);
-            }
+            // Two candidates: the final TargetPath (only exists after a
+            // successful finalize) and the .sidmpart file the engine
+            // actively writes to. A canceled download leaves only the
+            // .sidmpart; a completed one leaves only the final file.
+            await TryDeleteWithRetryAsync(path);
+            await TryDeleteWithRetryAsync(path + ".sidmpart");
         }
 
         StatusBarText = deleteFile ? $"Removed and deleted {fileName}" : $"Removed {fileName}";
+    }
+
+    /// <summary>
+    /// Mirrors the rename SparseFileWriter does at finalize time —
+    /// "Foo.exe" → "Foo (1).exe" → "Foo (2).exe", picking the first slot
+    /// that doesn't collide on disk OR with an in-memory Rows entry. Used
+    /// by the FileExistsDialog to suggest a non-colliding name when the
+    /// user picks "Save as new".
+    /// </summary>
+    private string FindAvailableTargetPath(string targetPath)
+    {
+        if (!Collides(targetPath)) return targetPath;
+
+        var dir = Path.GetDirectoryName(targetPath) ?? string.Empty;
+        var stem = Path.GetFileNameWithoutExtension(targetPath);
+        var ext = Path.GetExtension(targetPath); // includes the dot, or empty
+
+        for (var i = 1; i < 10000; i++)
+        {
+            var candidate = Path.Combine(dir, $"{stem} ({i}){ext}");
+            if (!Collides(candidate)) return candidate;
+        }
+        // Pathological — fall back to the original name and let the engine
+        // ResolveCollision pick something at finalize time.
+        return targetPath;
+    }
+
+    /// <summary>True if either the file (or its .sidmpart) is on disk, or
+    /// a live SIDM row already points at this TargetPath.</summary>
+    private bool Collides(string path) =>
+        File.Exists(path)
+        || File.Exists(path + ".sidmpart")
+        || Rows.Any(r => string.Equals(r.TargetPath, path, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Polls <see cref="DownloadEngine.IsActive"/> until it returns false or
+    /// the timeout elapses. Used by cancel-and-delete so we don't race the
+    /// engine's writer.DisposeAsync — File.Delete fails on a locked handle.
+    /// </summary>
+    private async Task WaitForEngineToReleaseAsync(long downloadId, int timeoutMs)
+    {
+        var deadline = Environment.TickCount + timeoutMs;
+        while (_engine.IsActive(downloadId) && Environment.TickCount < deadline)
+        {
+            await Task.Delay(50);
+        }
+    }
+
+    /// <summary>
+    /// Best-effort delete with short retries. The engine's worker may still
+    /// be flushing buffers when we get here; retrying for a second covers
+    /// the common Windows "file in use" race without making the user see
+    /// a flicker.
+    /// </summary>
+    private async Task TryDeleteWithRetryAsync(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            try
+            {
+                File.Delete(path);
+                return;
+            }
+            catch (IOException) when (attempt < 9)
+            {
+                await Task.Delay(100);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 9)
+            {
+                await Task.Delay(100);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete {Path}", path);
+                return;
+            }
+        }
+        _logger.LogWarning("Giving up on deleting {Path} after retries", path);
     }
 
     [RelayCommand]

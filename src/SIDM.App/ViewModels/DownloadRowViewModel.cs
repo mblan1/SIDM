@@ -26,6 +26,13 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
     private long _lastSampleBytes;
     private double _speedBytesPerSecond;
 
+    // Anchor for the "avg speed since download started" calculation. Set
+    // when Status first transitions to Downloading and reset on resume so
+    // a paused-and-resumed download averages over the latest run, not
+    // including the dead time in between.
+    private DateTimeOffset? _runStartUtc;
+    private long _bytesAtRunStart;
+
     public DownloadRowViewModel(Download model, UiProgressBus bus)
     {
         _model = model;
@@ -88,6 +95,25 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(SizeDisplay))]
     private DownloadStatus _status;
 
+    partial void OnStatusChanged(DownloadStatus value)
+    {
+        // Anchor the avg-speed window when the row enters Downloading;
+        // clear it on every other state so a fresh resume measures from
+        // the moment of resume, not from the original start.
+        if (value == DownloadStatus.Downloading)
+        {
+            if (_runStartUtc is null)
+            {
+                _runStartUtc = DateTimeOffset.UtcNow;
+                _bytesAtRunStart = BytesDownloaded;
+            }
+        }
+        else
+        {
+            _runStartUtc = null;
+        }
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIndeterminate))]
     [NotifyPropertyChangedFor(nameof(TotalBytesDisplay))]
@@ -96,7 +122,41 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SizeDisplay))]
+    [NotifyPropertyChangedFor(nameof(DownloadedBytesDisplay))]
+    [NotifyPropertyChangedFor(nameof(RemainingBytesDisplay))]
     private long _bytesDownloaded;
+
+    /// <summary>Just the downloaded byte count, formatted. Used by the progress
+    /// dialog's stats row where the layout already labels it.</summary>
+    public string DownloadedBytesDisplay => FormatBytes(BytesDownloaded);
+
+    /// <summary>Remaining bytes formatted, or em-dash if the total is unknown
+    /// (HLS playlists, no Content-Length, etc).</summary>
+    public string RemainingBytesDisplay
+    {
+        get
+        {
+            if (TotalBytes is not { } total || total <= 0) return "—";
+            var remaining = total - BytesDownloaded;
+            return remaining > 0 ? FormatBytes(remaining) : "0 B";
+        }
+    }
+
+    /// <summary>"X of N complete" — counts segments that have reported their
+    /// whole byte range. Shown above the chunks list to give the user a
+    /// glance-level summary without scrolling 8+ rows.</summary>
+    public string SegmentSummary
+    {
+        get
+        {
+            if (SegmentRows.Count == 0) return string.Empty;
+            var completed = SegmentRows.Count(s => s.Status == SegmentStatus.Completed);
+            var active = SegmentRows.Count(s => s.Status == SegmentStatus.Active);
+            return active > 0
+                ? $"{completed} of {SegmentRows.Count} complete · {active} active"
+                : $"{completed} of {SegmentRows.Count} complete";
+        }
+    }
 
     public double ProgressPercent => TotalBytes is { } total && total > 0
         ? Math.Min(100.0, (double)BytesDownloaded * 100.0 / total)
@@ -176,17 +236,60 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
     public double SpeedBytesPerSecond => _speedBytesPerSecond;
 
     /// <summary>
-    /// "1.2 MiB/s" while active; em-dash while paused/completed/failed/queued.
-    /// IDM "Transfer rate" column.
+    /// Long-run bytes/sec averaged across the current Downloading run.
+    /// Less reactive than <see cref="SpeedBytesPerSecond"/> but a better
+    /// number for "what should I plan around" — small short-lived stalls
+    /// don't drag it down the way they do the EMA.
     /// </summary>
-    public string TransferRateDisplay =>
-        Status == DownloadStatus.Downloading && _speedBytesPerSecond > 1
-            ? FormatBytes((long)_speedBytesPerSecond) + "/s"
-            : "—";
+    public double AverageSpeedBytesPerSecond
+    {
+        get
+        {
+            if (_runStartUtc is not { } start) return 0;
+            var elapsed = (DateTimeOffset.UtcNow - start).TotalSeconds;
+            if (elapsed < 0.1) return 0;
+            var bytes = BytesDownloaded - _bytesAtRunStart;
+            return bytes > 0 ? bytes / elapsed : 0;
+        }
+    }
 
     /// <summary>
-    /// Remaining time estimate (HH:MM:SS) while active and size is known; em-dash otherwise.
-    /// IDM "Time left" column.
+    /// Whether the Speed cell shows the long-run average instead of the
+    /// instantaneous (EMA) speed. Toggled by clicking the cell.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TransferRateDisplay))]
+    [NotifyPropertyChangedFor(nameof(SpeedModeLabel))]
+    [NotifyPropertyChangedFor(nameof(SpeedModeToggleLabel))]
+    private bool _showAverageSpeed;
+
+    /// <summary>
+    /// "1.2 MiB/s" while active; em-dash while paused/completed/failed/queued.
+    /// Reflects <see cref="ShowAverageSpeed"/> — flips between the EMA and
+    /// the long-run average.
+    /// </summary>
+    public string TransferRateDisplay
+    {
+        get
+        {
+            if (Status != DownloadStatus.Downloading) return "—";
+            var bps = ShowAverageSpeed ? AverageSpeedBytesPerSecond : _speedBytesPerSecond;
+            return bps > 1 ? FormatBytes((long)bps) + "/s" : "—";
+        }
+    }
+
+    /// <summary>Label that goes above the Speed value in the dialog —
+    /// changes with the toggle so the user can tell which mode is on.</summary>
+    public string SpeedModeLabel => ShowAverageSpeed ? "Avg speed" : "Speed";
+
+    /// <summary>Hint text for the toggle — clicking flips to the other mode.</summary>
+    public string SpeedModeToggleLabel => ShowAverageSpeed ? "Show current" : "Show average";
+
+    /// <summary>
+    /// Remaining time estimate while active and size is known; em-dash otherwise.
+    /// Formatted as "45s", "5m 23s", or "1h 23m" — colon notation like 01:23
+    /// reads as either 1 m 23 s or 1 h 23 m depending on context, which was
+    /// the bug behind the "time not correct" report.
     /// </summary>
     public string TimeLeftDisplay
     {
@@ -194,16 +297,25 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
         {
             if (Status != DownloadStatus.Downloading) return "—";
             if (TotalBytes is not { } total || total <= 0) return "—";
+            // Always base ETA on the instantaneous speed — it's what the
+            // remaining bytes are about to be transferred at. Using the
+            // long-run average would make ETA stale after a speed change.
             if (_speedBytesPerSecond < 1) return "—";
             var remaining = total - BytesDownloaded;
             if (remaining <= 0) return "—";
             var seconds = remaining / _speedBytesPerSecond;
             if (seconds < 0 || double.IsInfinity(seconds) || double.IsNaN(seconds)) return "—";
-            var ts = TimeSpan.FromSeconds(seconds);
-            return ts.TotalHours >= 1
-                ? $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
-                : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
+            return FormatDuration(TimeSpan.FromSeconds(seconds));
         }
+    }
+
+    private static string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalSeconds < 1) return "<1s";
+        if (ts.TotalMinutes < 1) return $"{ts.Seconds}s";
+        if (ts.TotalHours < 1) return $"{ts.Minutes}m {ts.Seconds}s";
+        if (ts.TotalDays < 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        return $"{(int)ts.TotalDays}d {ts.Hours}h";
     }
 
     /// <summary>
@@ -259,6 +371,7 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ProgressDisplay));
         OnPropertyChanged(nameof(TransferRateDisplay));
         OnPropertyChanged(nameof(TimeLeftDisplay));
+        OnPropertyChanged(nameof(SegmentSummary));
     }
 
     /// <summary>
@@ -328,11 +441,21 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
                     }
                 }
                 BytesDownloaded = _segmentByIdx.Values.Sum(s => s.BytesDownloaded);
+                // Drive the speed/ETA recompute here too — the bus path
+                // (ApplySegmentProgress) is one source of samples, but the
+                // periodic DB polling in MonitorAsync is the other, and a
+                // download whose bus events are missed (extension HLS,
+                // resumed-from-db state, etc.) would otherwise show "—" for
+                // Speed and Time left forever even though bytes are moving.
+                UpdateTransferRate();
                 OnPropertyChanged(nameof(ProgressPercent));
                 OnPropertyChanged(nameof(ProgressDisplay));
                 OnPropertyChanged(nameof(StatusDisplay));
                 OnPropertyChanged(nameof(TotalBytesDisplay));
                 OnPropertyChanged(nameof(LastTryDisplay));
+                OnPropertyChanged(nameof(SegmentSummary));
+                OnPropertyChanged(nameof(TransferRateDisplay));
+                OnPropertyChanged(nameof(TimeLeftDisplay));
             }
             if (dispatcher is null || dispatcher.CheckAccess()) apply();
             else dispatcher.BeginInvoke(apply);

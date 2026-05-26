@@ -147,7 +147,14 @@ public partial class MainWindow : FluentWindow
         {
             var engine = _services.GetService(typeof(DownloadEngine)) as DownloadEngine;
             if (engine is null) return;
-            var dlg = new DownloadProgressDialog(row, engine) { Owner = this };
+            // Pull DownloadsViewModel out of DI so the dialog's Cancel button
+            // can call back into the canonical "remove row + delete file" path
+            // instead of duplicating that logic in the dialog.
+            var downloads = _services.GetService(typeof(DownloadsViewModel)) as DownloadsViewModel;
+            Func<Task>? cancelCallback = downloads is not null
+                ? () => downloads.CancelAndDeleteAsync(row)
+                : null;
+            var dlg = new DownloadProgressDialog(row, engine, cancelCallback) { Owner = this };
             dlg.Show();
             dlg.Activate();
         }

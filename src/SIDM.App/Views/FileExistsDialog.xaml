@@ -1,0 +1,82 @@
+<ui:FluentWindow x:Class="SIDM.App.Views.FileExistsDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 mc:Ignorable="d"
+                 Title="File already exists"
+                 Height="320"
+                 Width="540"
+                 ResizeMode="NoResize"
+                 ExtendsContentIntoTitleBar="True"
+                 Icon="pack://application:,,,/Resources/sidm.png"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 WindowStartupLocation="CenterOwner"
+                 ShowInTaskbar="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="File already exists" />
+
+        <Grid Grid.Row="1" Margin="24,8,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header row: icon + headline -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ui:SymbolIcon Grid.Column="0" Symbol="Warning24" FontSize="36"
+                               Foreground="#F0A020"
+                               VerticalAlignment="Top" Margin="0,2,12,0" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                    <TextBlock Text="A file with this name already exists"
+                               FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" />
+                    <TextBlock x:Name="FileNameText"
+                               Margin="0,4,0,0" Opacity="0.85" FontSize="12"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="FolderText"
+                               Margin="0,2,0,0" Opacity="0.65" FontSize="11"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="DetailText"
+                               Margin="0,8,0,0" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                               Text="Choose how to handle the collision. This won't affect the URL — just the destination on disk." />
+                </StackPanel>
+            </Grid>
+
+            <!-- Spacer / suggested-new-name preview -->
+            <StackPanel Grid.Row="1" VerticalAlignment="Bottom" Margin="0,16,0,0">
+                <Border Background="#15FFFFFF" CornerRadius="6" Padding="10,8">
+                    <StackPanel>
+                        <TextBlock Text="If you save as new, the new file will be named:"
+                                   Opacity="0.65" FontSize="11" />
+                        <TextBlock x:Name="SuggestedNameText"
+                                   FontFamily="Consolas" FontSize="12"
+                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Action row -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <ui:Button Content="Cancel" Margin="0,0,8,0" Click="OnCancel" IsCancel="True" />
+                <ui:Button Content="Replace" Margin="0,0,8,0"
+                           Icon="{ui:SymbolIcon Symbol=ArrowSync24}"
+                           Click="OnReplace" />
+                <ui:Button Content="Save as new" Appearance="Primary"
+                           Icon="{ui:SymbolIcon Symbol=Add24}"
+                           Click="OnSaveAsNew" IsDefault="True" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

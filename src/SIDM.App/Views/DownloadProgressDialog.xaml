@@ -7,10 +7,10 @@
                  xmlns:vm="clr-namespace:SIDM.App.ViewModels"
                  mc:Ignorable="d"
                  Title="Download progress"
-                 Height="560"
-                 Width="720"
-                 MinHeight="420"
-                 MinWidth="560"
+                 Height="640"
+                 Width="780"
+                 MinHeight="480"
+                 MinWidth="620"
                  ExtendsContentIntoTitleBar="True"
                  Icon="pack://application:,,,/Resources/sidm.png"
                  WindowBackdropType="Mica"
@@ -28,6 +28,7 @@
 
         <Grid Grid.Row="1" Margin="24,8,24,24">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -65,40 +66,92 @@
                 <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}"
                              IsIndeterminate="{Binding IsIndeterminate}"
                              Maximum="100" Height="8" Margin="0,6,0,0" />
-                <Grid Margin="0,4,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" FontSize="11" Opacity="0.7">
-                        <Run Text="Total size: " />
-                        <Run Text="{Binding TotalBytesDisplay, Mode=OneWay}" />
-                    </TextBlock>
-                    <TextBlock Grid.Column="1" FontSize="11" Opacity="0.7">
-                        <Run Text="Segments: " />
-                        <Run Text="{Binding SegmentCount, Mode=OneWay}" />
-                    </TextBlock>
-                </Grid>
             </StackPanel>
 
-            <!-- Chunks header -->
-            <TextBlock Grid.Row="2" Text="Chunks" Margin="0,16,0,6" FontWeight="SemiBold" />
+            <!-- Stats: Speed | Downloaded | Remaining | Time left -->
+            <Border Grid.Row="2" Background="#10FFFFFF" CornerRadius="8" Padding="12,10" Margin="0,12,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
 
-            <!-- Per-chunk grid -->
-            <Border Grid.Row="3" Background="#15FFFFFF" CornerRadius="8" Padding="8">
+                    <Border Grid.Column="0" Background="Transparent" Cursor="Hand"
+                            ToolTip="{Binding SpeedModeToggleLabel}"
+                            MouseLeftButtonUp="OnToggleSpeedMode">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding SpeedModeLabel}" Opacity="0.6" FontSize="11" />
+                                <ui:SymbolIcon Symbol="ArrowSwap24" FontSize="10"
+                                               Opacity="0.5" Margin="6,0,0,0"
+                                               VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding TransferRateDisplay}" FontWeight="SemiBold" FontSize="13" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Downloaded" Opacity="0.6" FontSize="11" />
+                        <TextBlock Text="{Binding DownloadedBytesDisplay}" FontWeight="SemiBold" FontSize="13" Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Remaining" Opacity="0.6" FontSize="11" />
+                        <TextBlock Text="{Binding RemainingBytesDisplay}" FontWeight="SemiBold" FontSize="13" Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="3">
+                        <TextBlock Text="Time left" Opacity="0.6" FontSize="11" />
+                        <TextBlock Text="{Binding TimeLeftDisplay}" FontWeight="SemiBold" FontSize="13" Margin="0,2,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Chunks header with live summary -->
+            <Grid Grid.Row="3" Margin="0,16,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" FontWeight="SemiBold">
+                    <Run Text="Chunks" />
+                    <Run Text="  ·  " Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                    <Run Text="{Binding SegmentCount, Mode=OneWay}" />
+                    <Run Text=" total" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                </TextBlock>
+                <TextBlock Grid.Column="1" Text="{Binding SegmentSummary}"
+                           FontSize="11" Opacity="0.75" VerticalAlignment="Center" />
+            </Grid>
+
+            <!-- Per-chunk grid with color-coded bars -->
+            <Border Grid.Row="4" Background="#15FFFFFF" CornerRadius="8" Padding="8">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding SegmentRows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="4,4,4,6">
+                                <Grid Margin="4,3,4,5">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="60" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="180" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding RangeDisplay}" FontSize="11" Opacity="0.85" VerticalAlignment="Center" />
-                                    <ProgressBar Grid.Column="1" Value="{Binding Percent, Mode=OneWay}" Maximum="100" Height="6" Margin="8,0,8,0" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding ProgressDisplay}" FontSize="11" Opacity="0.85" VerticalAlignment="Center" TextAlignment="Right" />
+                                    <TextBlock Grid.Column="0" Text="{Binding RangeDisplay}"
+                                               FontSize="11" Opacity="0.85" VerticalAlignment="Center" />
+                                    <Border Grid.Column="1" Background="{Binding StatusBrush}"
+                                            CornerRadius="3" Padding="6,1" HorizontalAlignment="Left"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding StatusDisplay}"
+                                                   Foreground="White" FontSize="10" FontWeight="SemiBold" />
+                                    </Border>
+                                    <ProgressBar Grid.Column="2" Value="{Binding Percent, Mode=OneWay}" Maximum="100"
+                                                 Height="6" Margin="8,0,8,0" VerticalAlignment="Center"
+                                                 Foreground="{Binding StatusBrush}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding ProgressDisplay}"
+                                               FontSize="11" Opacity="0.85" VerticalAlignment="Center"
+                                               TextAlignment="Right" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -107,11 +160,23 @@
             </Border>
 
             <!-- Action buttons -->
-            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-                <ui:Button Content="Pause" Margin="0,0,8,0" Icon="{ui:SymbolIcon Symbol=Pause24}" Click="OnPause" />
-                <ui:Button Content="Resume" Margin="0,0,8,0" Icon="{ui:SymbolIcon Symbol=Play24}" Click="OnResume" />
-                <ui:Button Content="Close" Appearance="Primary" Click="OnClose" IsCancel="True" />
-            </StackPanel>
+            <Grid Grid.Row="5" Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ui:Button Grid.Column="0"
+                           Content="Cancel download"
+                           Icon="{ui:SymbolIcon Symbol=Delete24}"
+                           Click="OnCancelDownload"
+                           ToolTip="Stop this download and delete the partial file from disk." />
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <ui:Button Content="Pause" Margin="0,0,8,0" Icon="{ui:SymbolIcon Symbol=Pause24}" Click="OnPause" />
+                    <ui:Button Content="Resume" Margin="0,0,8,0" Icon="{ui:SymbolIcon Symbol=Play24}" Click="OnResume" />
+                    <ui:Button Content="Close" Appearance="Primary" Click="OnClose" IsCancel="True" />
+                </StackPanel>
+            </Grid>
         </Grid>
     </Grid>
 </ui:FluentWindow>
