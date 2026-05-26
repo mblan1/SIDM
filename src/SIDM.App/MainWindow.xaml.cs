@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -174,6 +176,124 @@ public partial class MainWindow : FluentWindow
         Topmost = true;
         Topmost = false;
         Focus();
+    }
+
+    // -- Right-click context menu on a download row -------------------------
+    // ContextMenu inherits its DataContext from the DataGridRow it's attached
+    // to, so each MenuItem.DataContext is the DownloadRowViewModel for the
+    // row the user right-clicked. Use the helper to extract it.
+
+    private static DownloadRowViewModel? RowFromMenuSender(object sender) =>
+        sender is System.Windows.Controls.MenuItem mi ? mi.DataContext as DownloadRowViewModel : null;
+
+    private void OnContextOpenFile(object sender, RoutedEventArgs e)
+    {
+        var row = RowFromMenuSender(sender);
+        if (row is null || string.IsNullOrWhiteSpace(row.TargetPath)) return;
+        if (!File.Exists(row.TargetPath))
+        {
+            ShowWarning("Open file", $"File no longer exists at:\n{row.TargetPath}");
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo(row.TargetPath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            ShowWarning("Open file", ex.Message);
+        }
+    }
+
+    private void OnContextOpenFolder(object sender, RoutedEventArgs e)
+    {
+        var row = RowFromMenuSender(sender);
+        if (row is null || string.IsNullOrWhiteSpace(row.TargetPath)) return;
+        try
+        {
+            if (File.Exists(row.TargetPath))
+            {
+                // /select highlights the file inside its folder rather than
+                // opening it — what a user wants from "Open file location".
+                Process.Start("explorer.exe", $"/select,\"{row.TargetPath}\"");
+                return;
+            }
+            var folder = Path.GetDirectoryName(row.TargetPath);
+            if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
+            {
+                Process.Start("explorer.exe", $"\"{folder}\"");
+                return;
+            }
+            ShowWarning("Open file location", "Neither the file nor its folder exists anymore.");
+        }
+        catch (Exception ex)
+        {
+            ShowWarning("Open file location", ex.Message);
+        }
+    }
+
+    private void OnContextCopyUrl(object sender, RoutedEventArgs e)
+    {
+        var row = RowFromMenuSender(sender);
+        if (row is null) return;
+        try
+        {
+            Clipboard.SetText(row.Url ?? string.Empty);
+            _viewModel.Downloads.StatusBarText = "Copied URL to clipboard.";
+        }
+        catch (Exception ex)
+        {
+            // Clipboard can transiently fail when another app holds it open.
+            ShowWarning("Copy URL", ex.Message);
+        }
+    }
+
+    private void OnContextPause(object sender, RoutedEventArgs e)
+    {
+        var row = RowFromMenuSender(sender);
+        if (row is null) return;
+        if (_viewModel.Downloads.PauseCommand.CanExecute(row))
+        {
+            _viewModel.Downloads.PauseCommand.Execute(row);
+        }
+    }
+
+    private void OnContextResume(object sender, RoutedEventArgs e)
+    {
+        var row = RowFromMenuSender(sender);
+        if (row is null) return;
+        if (_viewModel.Downloads.ResumeCommand.CanExecute(row))
+        {
+            _viewModel.Downloads.ResumeCommand.Execute(row);
+        }
+    }
+
+    private void OnContextRemove(object sender, RoutedEventArgs e)
+    {
+        var row = RowFromMenuSender(sender);
+        if (row is null) return;
+        // Route through the same path as the toolbar's Remove command — it
+        // opens the confirm dialog (with the "also delete file" option) so
+        // a right-click Remove can't accidentally nuke files.
+        if (_viewModel.Downloads.RemoveSelectedCommand.CanExecute(row))
+        {
+            _viewModel.Downloads.RemoveSelectedCommand.Execute(row);
+        }
+    }
+
+    private void OnContextProperties(object sender, RoutedEventArgs e)
+    {
+        var row = RowFromMenuSender(sender);
+        if (row is null) return;
+        var dlg = new FilePropertiesDialog(row) { Owner = this };
+        dlg.ShowDialog();
+    }
+
+    private void ShowWarning(string title, string message)
+    {
+        System.Windows.MessageBox.Show(this, message, title,
+            System.Windows.MessageBoxButton.OK,
+            System.Windows.MessageBoxImage.Warning);
     }
 
     private async Task MaybeShowWelcomeAsync()

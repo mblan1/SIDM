@@ -30,6 +30,26 @@ public partial class AddDownloadViewModel : ObservableObject
     [ObservableProperty]
     private string? _errorMessage;
 
+    /// <summary>
+    /// yt-dlp format selector chosen by the browser-overlay picker (e.g.
+    /// <c>"137+bestaudio/best"</c>). Null for plain HTTP captures; when set,
+    /// the dialog renders a read-only "Format: …" row to confirm the
+    /// resolution + size the user picked. Round-trips into
+    /// <see cref="Download.SelectedYtDlpFormat"/> on accept.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasYtDlpFormat))]
+    private string? _ytDlpFormat;
+
+    /// <summary>Human-readable label the dialog renders next to "Format:"
+    /// (e.g. "1080p MP4 · ~145 MB"). Set together with <see cref="YtDlpFormat"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasYtDlpFormat))]
+    private string? _ytDlpFormatLabel;
+
+    /// <summary>Drives the visibility of the format row.</summary>
+    public bool HasYtDlpFormat => !string.IsNullOrEmpty(YtDlpFormat) && !string.IsNullOrEmpty(YtDlpFormatLabel);
+
     public bool IsValid => !string.IsNullOrWhiteSpace(Url)
                            && Uri.TryCreate(Url, UriKind.Absolute, out var u)
                            && (u.Scheme == "http" || u.Scheme == "https")

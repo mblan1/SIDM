@@ -108,6 +108,31 @@ public partial class App : Application
             Log.Warning(ex, "NMH registration refresh failed");
         }
 
+        // Auto-re-extract any browser extension folders that are older
+        // than the bundled zip. Catches the case where the user upgraded
+        // SIDM but never clicked Install/Update — without this, the
+        // browser keeps loading the old manifest (and stale content
+        // scripts) until the user remembers to re-trigger extraction.
+        try
+        {
+            var installer = _host.Services.GetService<Services.BrowserExtensionInstaller>();
+            if (installer is not null)
+            {
+                foreach (var kind in Enum.GetValues<SIDM.Core.BrowserKind>())
+                {
+                    if (installer.ExtractBundledIfOutdated(kind))
+                    {
+                        Log.Information("Auto-updated browser extension for {Kind} to v{Version}",
+                            kind, SIDM.Core.AppInfo.Version);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Browser extension auto-extract failed");
+        }
+
         // Apply the user's theme BEFORE the main window is created so the
         // first paint is the right color — flipping themes after Show()
         // produces a brief flash of the wrong theme.

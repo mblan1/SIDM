@@ -27,5 +27,14 @@ public class Download
     public string? Manifest { get; set; }
     public int RetryCount { get; set; }
 
+    /// <summary>
+    /// yt-dlp format selector chosen by the user — e.g. <c>"137+140"</c> for
+    /// 1080p video + best audio, or <c>"bestaudio[ext=m4a]"</c> for an
+    /// audio-only download. Null means "let yt-dlp pick its default" (the
+    /// engine then falls back to <c>bestvideo*+bestaudio/best</c>). Set by
+    /// the browser-overlay format picker; ignored for non-yt-dlp routes.
+    /// </summary>
+    public string? SelectedYtDlpFormat { get; set; }
+
     public List<Segment> Segments { get; set; } = [];
 }

@@ -153,6 +153,105 @@ public sealed class BrowserExtensionInstaller
         return File.Exists(path) ? path : null;
     }
 
+    /// <summary>
+    /// Silent re-extract used by the startup auto-updater. Compares the
+    /// extracted folder's manifest version to the bundled zip's version
+    /// (which is just <see cref="AppInfo.Version"/>); if the folder is
+    /// older, overwrites it from the bundled zip without opening the
+    /// browser or showing the install dialog. Returns true when an
+    /// update was applied (so callers can log it).
+    /// </summary>
+    public bool ExtractBundledIfOutdated(BrowserKind kind)
+    {
+        var packLabel = kind.IsChromium() ? "Chromium" : "Firefox";
+        var bundledVersion = SIDM.Core.AppInfo.Version;
+        var zipPath = TryResolveLocalPack(packLabel, bundledVersion);
+        if (zipPath is null)
+        {
+            // No bundled zip → nothing to do (we don't reach for the
+            // network on startup, only on explicit user action).
+            return false;
+        }
+
+        var folder = ExtensionFolder(kind);
+        if (Directory.Exists(folder))
+        {
+            var installedVersion = ReadManifestVersion(folder);
+            if (!string.IsNullOrEmpty(installedVersion)
+                && CompareDottedVersions(installedVersion, bundledVersion) >= 0)
+            {
+                // Already at or beyond the bundled version — leave alone.
+                return false;
+            }
+            _logger.LogInformation(
+                "Re-extracting {Kind} extension: installed v{Installed} → bundled v{Bundled}",
+                kind, installedVersion ?? "(unknown)", bundledVersion);
+        }
+        else
+        {
+            // No folder yet — this is the very-first-run case. Don't
+            // pre-create folders for browsers the user hasn't installed
+            // the extension into; only re-extract on top of existing ones.
+            return false;
+        }
+
+        try
+        {
+            Directory.Delete(folder, recursive: true);
+            Directory.CreateDirectory(folder);
+            ZipFile.ExtractToDirectory(zipPath, folder, overwriteFiles: true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Auto-extract failed for {Kind}", kind);
+            return false;
+        }
+    }
+
+    private static string? ReadManifestVersion(string folder)
+    {
+        var manifestPath = Path.Combine(folder, "manifest.json");
+        if (!File.Exists(manifestPath)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifestPath));
+            return doc.RootElement.TryGetProperty("version", out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
+                ? v.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Dotted-int compare — "0.1.7" &gt; "0.1.0"; safe with pre-release
+    /// suffixes that fall back to ordinal comparison.</summary>
+    private static int CompareDottedVersions(string a, string b)
+    {
+        if (string.Equals(a, b, StringComparison.Ordinal)) return 0;
+        var pa = SplitToInts(a);
+        var pb = SplitToInts(b);
+        var len = Math.Max(pa.Length, pb.Length);
+        for (var i = 0; i < len; i++)
+        {
+            var x = i < pa.Length ? pa[i] : 0;
+            var y = i < pb.Length ? pb[i] : 0;
+            if (x != y) return x.CompareTo(y);
+        }
+        return string.CompareOrdinal(a, b);
+    }
+
+    private static int[] SplitToInts(string v)
+    {
+        var clean = new string(v.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+        if (clean.Length == 0) return Array.Empty<int>();
+        return clean.Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => int.TryParse(s, out var n) ? n : 0)
+            .ToArray();
+    }
+
     private async Task DownloadAsync(
         string url, string destination,
         IProgress<InstallProgress>? progress,

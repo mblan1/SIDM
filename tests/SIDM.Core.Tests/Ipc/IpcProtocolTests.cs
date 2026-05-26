@@ -62,6 +62,61 @@ public class IpcProtocolTests
     }
 
     [Fact]
+    public void DownloadRequest_round_trips_yt_dlp_format_fields()
+    {
+        var original = new DownloadRequestMessage(
+            Url: "https://www.youtube.com/watch?v=abc",
+            YtDlpFormat: "137+bestaudio/best",
+            YtDlpFormatLabel: "1080p · MP4 · ~145 MB");
+
+        var bytes = IpcSerializer.SerializeToUtf8Bytes(original);
+        var rt = IpcSerializer.Deserialize(bytes).Should().BeOfType<DownloadRequestMessage>().Subject;
+
+        rt.Url.Should().Be(original.Url);
+        rt.YtDlpFormat.Should().Be(original.YtDlpFormat);
+        rt.YtDlpFormatLabel.Should().Be(original.YtDlpFormatLabel);
+    }
+
+    [Fact]
+    public void ListFormatsRequest_round_trips_through_serializer()
+    {
+        var original = new ListFormatsRequestMessage("https://youtu.be/abc");
+        var bytes = IpcSerializer.SerializeToUtf8Bytes(original);
+        var rt = IpcSerializer.Deserialize(bytes).Should().BeOfType<ListFormatsRequestMessage>().Subject;
+        rt.Url.Should().Be(original.Url);
+    }
+
+    [Fact]
+    public void ListFormatsResponse_round_trips_through_serializer()
+    {
+        var original = new ListFormatsResponseMessage(
+            Url: "https://youtu.be/abc",
+            Title: "Sample video",
+            Formats: new[]
+            {
+                new FormatOption("137+bestaudio/best", "video", "1080p", "mp4",
+                    Vcodec: "avc1.640028", Acodec: null, Height: 1080, Fps: 30,
+                    AudioBitrateKbps: null, FileSize: 145_000_000L),
+                new FormatOption("140", "audio", "M4A (AAC) · 128k", "m4a",
+                    Vcodec: null, Acodec: "mp4a.40.2", Height: null, Fps: null,
+                    AudioBitrateKbps: 128, FileSize: 4_500_000L),
+            });
+
+        var bytes = IpcSerializer.SerializeToUtf8Bytes(original);
+        var rt = IpcSerializer.Deserialize(bytes).Should().BeOfType<ListFormatsResponseMessage>().Subject;
+
+        rt.Url.Should().Be(original.Url);
+        rt.Title.Should().Be(original.Title);
+        rt.Formats.Should().HaveCount(2);
+        rt.Formats[0].FormatId.Should().Be("137+bestaudio/best");
+        rt.Formats[0].Kind.Should().Be("video");
+        rt.Formats[0].Height.Should().Be(1080);
+        rt.Formats[0].FileSize.Should().Be(145_000_000L);
+        rt.Formats[1].Kind.Should().Be("audio");
+        rt.Formats[1].AudioBitrateKbps.Should().Be(128);
+    }
+
+    [Fact]
     public void Type_discriminator_is_emitted_in_camelCase()
     {
         var json = System.Text.Encoding.UTF8.GetString(

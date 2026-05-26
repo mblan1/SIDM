@@ -7,6 +7,13 @@ namespace SIDM.VideoGrabber;
 public interface IYtDlpRunner
 {
     Task<YtDlpRunResult> RunAsync(YtDlpRunRequest request, IProgress<YtDlpProgress>? progress, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs <c>yt-dlp -J</c> against a URL and returns the curated set of
+    /// formats the browser-overlay picker should render. Does NOT download
+    /// anything — just enumerates options.
+    /// </summary>
+    Task<YtDlpFormatListResult> ListFormatsAsync(YtDlpFormatListRequest request, CancellationToken cancellationToken);
 }
 
 /// <summary>What to download, where to put it, which binaries to use.</summary>
@@ -31,4 +38,20 @@ public sealed record YtDlpRunResult(
     bool Success,
     string? FinalFilePath,
     int ExitCode,
+    string? FailureMessage);
+
+/// <summary>Probe arguments for <see cref="IYtDlpRunner.ListFormatsAsync"/>.</summary>
+/// <param name="Url">Video URL.</param>
+/// <param name="YtDlpPath">Resolved yt-dlp executable. Required.</param>
+public sealed record YtDlpFormatListRequest(string Url, string YtDlpPath);
+
+/// <summary>Outcome of a format probe.</summary>
+/// <param name="Success">True when yt-dlp exited 0 and produced parsable JSON.</param>
+/// <param name="Title">Video title from yt-dlp's info dump, or null.</param>
+/// <param name="Formats">Curated rows for the picker — empty on failure.</param>
+/// <param name="FailureMessage">Human-readable error when <see cref="Success"/> is false.</param>
+public sealed record YtDlpFormatListResult(
+    bool Success,
+    string? Title,
+    YtDlpFormatOption[] Formats,
     string? FailureMessage);

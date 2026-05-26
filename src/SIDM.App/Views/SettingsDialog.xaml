@@ -166,7 +166,30 @@
                     <ui:Button Grid.Column="2" Margin="8,0,0,0" Content="Test" Click="OnTestYtDlp" />
                 </Grid>
 
+                <!-- Manage row: SIDM-managed yt-dlp install in %LocalAppData%\SIDM\bin\.
+                     Install pulls from yt-dlp's GitHub Releases; Uninstall removes
+                     the managed copy; Refresh re-runs the resolver and updates the
+                     status box. Existing Browse stays for users with a pinned path. -->
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
+                               Content="Install"
+                               Click="OnInstallYtDlp"
+                               ToolTip="Download the latest yt-dlp.exe from GitHub into %LocalAppData%\SIDM\bin\." />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=Delete24}"
+                               Margin="8,0,0,0"
+                               Content="Uninstall"
+                               Click="OnUninstallYtDlp"
+                               ToolTip="Remove the SIDM-managed yt-dlp.exe (leaves any user-pinned path alone)." />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowSync24}"
+                               Margin="8,0,0,0"
+                               Content="Refresh"
+                               Click="OnRefreshYtDlp"
+                               ToolTip="Re-scan the resolver chain and update the status below." />
+                </StackPanel>
+
                 <TextBlock Text="ffmpeg.exe path" Margin="0,12,0,4" />
+                <TextBlock Margin="0,0,0,4" Opacity="0.65" FontSize="11"
+                           Text="Required to merge video + audio for resolutions ≥ 1080p (without it, yt-dlp saves separate files)." />
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -176,6 +199,26 @@
                                 PlaceholderText="(leave blank to auto-detect via PATH)" />
                     <ui:Button Grid.Column="1" Margin="8,0,0,0" Content="Browse…" Click="OnBrowseFfmpeg" />
                 </Grid>
+
+                <!-- Mirror of the yt-dlp manage row. Install pulls ffmpeg.exe
+                     from the yt-dlp/FFmpeg-Builds GitHub release zip and
+                     extracts just bin/ffmpeg.exe into %LocalAppData%\SIDM\bin\. -->
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
+                               Content="Install"
+                               Click="OnInstallFfmpeg"
+                               ToolTip="Download a static ffmpeg.exe from the yt-dlp/FFmpeg-Builds GitHub release into %LocalAppData%\SIDM\bin\." />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=Delete24}"
+                               Margin="8,0,0,0"
+                               Content="Uninstall"
+                               Click="OnUninstallFfmpeg"
+                               ToolTip="Remove the SIDM-managed ffmpeg.exe (leaves any user-pinned path alone)." />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowSync24}"
+                               Margin="8,0,0,0"
+                               Content="Refresh"
+                               Click="OnRefreshFfmpeg"
+                               ToolTip="Re-scan the resolver chain and update the status below." />
+                </StackPanel>
 
                 <Border Background="#15FFFFFF" CornerRadius="4" Padding="8,6" Margin="0,8,0,0">
                     <TextBlock Text="{Binding YtDlpStatus}" FontSize="11" Opacity="0.85" TextWrapping="Wrap" />

@@ -18,35 +18,138 @@ namespace SIDM.App.Views;
 /// </summary>
 public sealed partial class BrowserInstallRowViewModel : ObservableObject
 {
+    /// <summary>Bundled extension version SIDM is currently shipping.
+    /// Pulled from <see cref="AppInfo.Version"/>.</summary>
+    public string BundledVersion => SIDM.Core.AppInfo.Version;
+
     public DetectedBrowser Browser { get; }
     public string DisplayName => Browser.Kind.DisplayName();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ButtonLabel))]
-    [NotifyPropertyChangedFor(nameof(IsButtonEnabled))]
-    [NotifyPropertyChangedFor(nameof(ButtonAppearance))]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonLabel))]
+    [NotifyPropertyChangedFor(nameof(IsPrimaryButtonEnabled))]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonAppearance))]
+    [NotifyPropertyChangedFor(nameof(ShowSecondaryButton))]
     private string _statusLine = "Not installed";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ButtonLabel))]
-    [NotifyPropertyChangedFor(nameof(IsButtonEnabled))]
-    [NotifyPropertyChangedFor(nameof(ButtonAppearance))]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonLabel))]
+    [NotifyPropertyChangedFor(nameof(IsPrimaryButtonEnabled))]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonAppearance))]
+    [NotifyPropertyChangedFor(nameof(ShowSecondaryButton))]
+    [NotifyPropertyChangedFor(nameof(VersionLine))]
+    [NotifyPropertyChangedFor(nameof(VersionLineVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsOutdated))]
     private bool _isConnected;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ButtonLabel))]
-    [NotifyPropertyChangedFor(nameof(IsButtonEnabled))]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonLabel))]
+    [NotifyPropertyChangedFor(nameof(IsPrimaryButtonEnabled))]
+    [NotifyPropertyChangedFor(nameof(ShowSecondaryButton))]
     private bool _isWorking;
 
-    public string ButtonLabel => IsConnected ? "Connected" : (IsWorking ? "Installing…" : "Install");
-    public bool IsButtonEnabled => !IsConnected && !IsWorking;
-    public string ButtonAppearance => IsConnected ? "Secondary" : "Primary";
+    /// <summary>Last version the extension reported via hello. Null when no
+    /// version is on file (never connected, or pre-0.1.6 SIDM that didn't
+    /// record it).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonLabel))]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonAppearance))]
+    [NotifyPropertyChangedFor(nameof(VersionLine))]
+    [NotifyPropertyChangedFor(nameof(VersionLineVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsOutdated))]
+    private string? _installedVersion;
 
-    public BrowserInstallRowViewModel(DetectedBrowser browser, bool isConnected)
+    /// <summary>True when we know the installed extension is older than
+    /// what SIDM bundles (and the row is connected so the comparison
+    /// makes sense).</summary>
+    public bool IsOutdated =>
+        IsConnected
+        && !string.IsNullOrEmpty(InstalledVersion)
+        && CompareVersions(InstalledVersion!, BundledVersion) < 0;
+
+    /// <summary>Primary action label. Drives the right-hand button.</summary>
+    public string PrimaryButtonLabel
+    {
+        get
+        {
+            if (IsWorking) return "Working…";
+            if (!IsConnected) return "Install";
+            if (IsOutdated) return "Update";
+            return "Connected";
+        }
+    }
+
+    public bool IsPrimaryButtonEnabled =>
+        !IsWorking && (!IsConnected || IsOutdated);
+
+    public string PrimaryButtonAppearance =>
+        IsOutdated ? "Primary"
+        : IsConnected ? "Secondary"
+        : "Primary";
+
+    /// <summary>Secondary "Reload" link — visible when the row is
+    /// connected (regardless of up-to-date status). Lets the user
+    /// kick the extension manually after editing the unpacked folder.</summary>
+    public bool ShowSecondaryButton => IsConnected && !IsWorking;
+
+    /// <summary>
+    /// "Installed 0.1.4  →  bundled 0.1.5" or "Installed 0.1.5" depending on
+    /// state. Hidden when we don't yet know the installed version (never
+    /// connected). Drives the small info line under the browser name.
+    /// </summary>
+    public string VersionLine
+    {
+        get
+        {
+            if (!IsConnected || string.IsNullOrEmpty(InstalledVersion)) return string.Empty;
+            return IsOutdated
+                ? $"Installed v{InstalledVersion}  →  update to v{BundledVersion}"
+                : $"Installed v{InstalledVersion}";
+        }
+    }
+
+    public Visibility VersionLineVisibility =>
+        IsConnected && !string.IsNullOrEmpty(InstalledVersion) ? Visibility.Visible : Visibility.Collapsed;
+
+    public BrowserInstallRowViewModel(DetectedBrowser browser, bool isConnected, string? installedVersion)
     {
         Browser = browser;
         _isConnected = isConnected;
+        _installedVersion = installedVersion;
         _statusLine = isConnected ? "Connected — capturing downloads" : "Not installed yet";
+    }
+
+    /// <summary>
+    /// Lexicographic dotted-int comparison good enough for our 0.1.x stream.
+    /// "0.1.5" &gt; "0.1.4"; "0.2.0" &gt; "0.1.99". Pre-release tags
+    /// ("-beta") fall back to ordinal compare on the leftover, which is
+    /// acceptable for the manage-extension UX (no false-update prompts).
+    /// </summary>
+    public static int CompareVersions(string a, string b)
+    {
+        if (string.Equals(a, b, StringComparison.Ordinal)) return 0;
+        var pa = SplitToInts(a);
+        var pb = SplitToInts(b);
+        var len = Math.Max(pa.Length, pb.Length);
+        for (var i = 0; i < len; i++)
+        {
+            var x = i < pa.Length ? pa[i] : 0;
+            var y = i < pb.Length ? pb[i] : 0;
+            if (x != y) return x.CompareTo(y);
+        }
+        // Numeric parts equal — fall back to ordinal string compare so
+        // "1.0.0-beta" sorts before "1.0.0".
+        return string.CompareOrdinal(a, b);
+    }
+
+    private static int[] SplitToInts(string v)
+    {
+        // Take only the leading numeric-dot prefix — drop any "-beta" / "+build".
+        var clean = new string(v.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+        if (clean.Length == 0) return Array.Empty<int>();
+        return clean.Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => int.TryParse(s, out var n) ? n : 0)
+            .ToArray();
     }
 }
 
@@ -91,7 +194,8 @@ public partial class BrowserExtensionInstallDialog : FluentWindow
             // Show a synthetic "no browser detected" row.
             var stub = new BrowserInstallRowViewModel(
                 new DetectedBrowser(BrowserKind.Chrome, string.Empty),
-                isConnected: false)
+                isConnected: false,
+                installedVersion: null)
             {
                 StatusLine = "No supported browsers found on this machine.",
             };
@@ -101,7 +205,10 @@ public partial class BrowserExtensionInstallDialog : FluentWindow
         {
             foreach (var browser in detected)
             {
-                Rows.Add(new BrowserInstallRowViewModel(browser, _presence.IsConnected(browser.Kind)));
+                Rows.Add(new BrowserInstallRowViewModel(
+                    browser,
+                    _presence.IsConnected(browser.Kind),
+                    _presence.GetLastSeenVersion(browser.Kind)));
             }
         }
 
@@ -110,6 +217,10 @@ public partial class BrowserExtensionInstallDialog : FluentWindow
 
         // Live-flip rows to "Connected" as soon as the extension says hello.
         _presence.FirstSeen += OnPresenceFirstSeen;
+        // Refresh the version badge whenever the extension reports a new
+        // version (typically after the user clicks Update + reloads it in
+        // Chrome). Cheaper than polling.
+        _presence.VersionChanged += OnPresenceVersionChanged;
     }
 
     private void OnPresenceFirstSeen(BrowserKind kind)
@@ -123,6 +234,7 @@ public partial class BrowserExtensionInstallDialog : FluentWindow
                     r.IsConnected = true;
                     r.IsWorking = false;
                     r.StatusLine = "Connected — capturing downloads";
+                    r.InstalledVersion = _presence.GetLastSeenVersion(kind);
                 }
             }
 
@@ -134,18 +246,56 @@ public partial class BrowserExtensionInstallDialog : FluentWindow
         });
     }
 
+    private void OnPresenceVersionChanged(BrowserKind kind)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            foreach (var r in Rows)
+            {
+                if (r.Browser.Kind == kind)
+                {
+                    r.InstalledVersion = _presence.GetLastSeenVersion(kind);
+                    if (!r.IsOutdated && r.IsConnected)
+                    {
+                        // Just upgraded — show a brief confirmation in the status line.
+                        r.StatusLine = $"Connected — running v{r.InstalledVersion}";
+                    }
+                }
+            }
+        });
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         _presence.FirstSeen -= OnPresenceFirstSeen;
+        _presence.VersionChanged -= OnPresenceVersionChanged;
         base.OnClosed(e);
     }
 
-    private async void OnInstallClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Primary action — branches on the row's state. First-time install
+    /// shows the full guide; in-place update on a connected row
+    /// re-extracts files and tells the browser to reload (no guide noise).
+    /// </summary>
+    private async void OnPrimaryClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Wpf.Ui.Controls.Button btn) return;
         if (btn.Tag is not BrowserInstallRowViewModel row) return;
         if (string.IsNullOrEmpty(row.Browser.ExecutablePath)) return;
 
+        // Connected + outdated → update path (silent re-extract, reload prompt).
+        if (row.IsConnected && row.IsOutdated)
+        {
+            await DoUpdateAsync(row);
+            return;
+        }
+
+        // First-time install: full guide.
+        await DoInstallAsync(row);
+    }
+
+    private async Task DoInstallAsync(BrowserInstallRowViewModel row)
+    {
         row.IsWorking = true;
         row.StatusLine = "Starting…";
 
@@ -172,6 +322,60 @@ public partial class BrowserExtensionInstallDialog : FluentWindow
         {
             row.StatusLine = result.Message;
             ShowGuideStatus(result.Message);
+        }
+    }
+
+    /// <summary>
+    /// Re-extracts the latest extension pack on top of the existing folder
+    /// and opens the browser's extensions page so the user can click the
+    /// reload arrow. The extension is already loaded from the same folder
+    /// path, so a click on the reload arrow picks up the new files. When
+    /// the extension reconnects with a new <c>clientVersion</c>, the row
+    /// flips out of "Update" via <see cref="OnPresenceVersionChanged"/>.
+    /// </summary>
+    private async Task DoUpdateAsync(BrowserInstallRowViewModel row)
+    {
+        row.IsWorking = true;
+        var originalStatus = row.StatusLine;
+        row.StatusLine = $"Updating to v{row.BundledVersion}…";
+
+        var result = await _installer.InstallAsync(row.Browser);
+
+        row.IsWorking = false;
+        if (result.Step == InstallStep.Complete)
+        {
+            row.StatusLine = $"Updated — click the reload arrow next to SIDM in {row.Browser.Kind.DisplayName()}.";
+        }
+        else if (result.Step == InstallStep.Failed)
+        {
+            row.StatusLine = result.Message;
+        }
+        else
+        {
+            row.StatusLine = originalStatus;
+        }
+    }
+
+    /// <summary>
+    /// Reload button — opens the browser's extensions page so the user can
+    /// click the per-extension reload arrow. Doesn't re-extract: this is
+    /// for the case where they've manually edited the unpacked folder or
+    /// the extension is misbehaving and they want to kick it.
+    /// </summary>
+    private void OnReloadClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Wpf.Ui.Controls.Button btn) return;
+        if (btn.Tag is not BrowserInstallRowViewModel row) return;
+        if (string.IsNullOrEmpty(row.Browser.ExecutablePath)) return;
+
+        try
+        {
+            BrowserExtensionInstaller.OpenExtensionPage(row.Browser);
+            row.StatusLine = $"Opened {row.Browser.Kind.DisplayName()} — click the reload arrow next to SIDM.";
+        }
+        catch (Exception ex)
+        {
+            row.StatusLine = $"Couldn't open browser: {ex.Message}";
         }
     }
 

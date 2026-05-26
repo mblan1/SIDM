@@ -249,6 +249,53 @@ public sealed class DownloadEngine
     }
 
     /// <summary>
+    /// Writes a single Idx=0 segment row before the yt-dlp / HLS / DASH
+    /// runners start, so:
+    ///   - <see cref="SIDM.Data.Repositories.SegmentProgressWriter"/>'s
+    ///     periodic UPDATE matches a real row instead of affecting 0 rows
+    ///     (which was the cause of the "0% all the way through, no speed,
+    ///     no ETA" symptom on yt-dlp downloads).
+    ///   - The chunks panel + per-segment Percent in the progress dialog
+    ///     renders immediately — the row VM rebuilds its segments map from
+    ///     the first poll.
+    /// EndByte uses the picker-supplied <see cref="Download.TotalBytes"/>
+    /// when known; otherwise 0 (the live download path still drives
+    /// progress via the model's BytesDownloaded / TotalBytes, not the
+    /// segment's Length).
+    /// </summary>
+    private static async Task EnsureSinglePlaceholderSegmentAsync(
+        IDownloadRepository repo,
+        Download download,
+        CancellationToken cancellationToken)
+    {
+        // Already persisted by a previous run / resume — leave the bytes
+        // already on file intact so resume math stays correct.
+        if (download.Segments.Count > 0) return;
+
+        var totalBytes = download.TotalBytes ?? 0;
+        var endByte = totalBytes > 0 ? totalBytes - 1 : 0;
+        try
+        {
+            await repo.ReplaceSegmentsAsync(download.Id, new[]
+            {
+                new Segment
+                {
+                    Idx = 0,
+                    StartByte = 0,
+                    EndByte = endByte,
+                    BytesDownloaded = 0,
+                    Status = SegmentStatus.Pending,
+                },
+            }, cancellationToken);
+        }
+        catch
+        {
+            // Best-effort — if persistence fails, the runner still works,
+            // we just lose the chunks-panel/progress-writer plumbing.
+        }
+    }
+
+    /// <summary>
     /// yt-dlp run path. Spawns the binary, streams progress through the same
     /// <see cref="IDownloadProgressSink"/> the HTTP engine uses (mapped to a
     /// single synthetic segment with Idx=0 because yt-dlp does not expose
@@ -278,6 +325,17 @@ public sealed class DownloadEngine
             return;
         }
 
+        // Persist a synthetic single-segment row up front so the progress
+        // bus's UPDATE statements match a real row (the writer's UPDATE
+        // would otherwise affect 0 rows because the segment is only
+        // persisted at completion in PersistResultAsync — the live
+        // download then shows 0% / "—" speed / empty chunks panel even
+        // though bytes are flowing). The end-byte is the picker's
+        // expectedLength when known; updates to the actual total happen
+        // at completion. The chunks panel renders one "stream" row
+        // immediately so the user sees activity.
+        await EnsureSinglePlaceholderSegmentAsync(repo, download, cts.Token);
+
         var sink = new ScopedSegmentProgressSink(download.Id, _progressSink);
         long observedTotalBytes = 0;
         long lastReportedBytes = 0;
@@ -298,7 +356,10 @@ public sealed class DownloadEngine
             Url: download.Url,
             OutputDirectory: outputDir!,
             YtDlpPath: ytDlpPath,
-            FfmpegPath: _videoGrabberSettings.ResolveFfmpeg());
+            FfmpegPath: _videoGrabberSettings.ResolveFfmpeg(),
+            // User-picked format selector from the browser-overlay format
+            // picker (null = let yt-dlp pick its default).
+            FormatSelector: download.SelectedYtDlpFormat);
 
         YtDlpRunResult result;
         try
@@ -375,6 +436,10 @@ public sealed class DownloadEngine
         {
             targetPath = Path.ChangeExtension(targetPath, ".ts");
         }
+
+        // Same skeleton trick as RunYouTubeAsync — without this, the
+        // progress writer's UPDATE matches 0 rows and the UI sits at 0%.
+        await EnsureSinglePlaceholderSegmentAsync(repo, download, cts.Token);
 
         var sink = new ScopedSegmentProgressSink(download.Id, _progressSink);
         long observedTotalBytes = 0;
@@ -474,6 +539,9 @@ public sealed class DownloadEngine
     private async Task RunDashAsync(IDownloadRepository repo, Download download, CancellationTokenSource cts)
     {
         var targetPath = Path.ChangeExtension(download.TargetPath, ".mp4");
+
+        // Same skeleton trick as the other single-segment paths.
+        await EnsureSinglePlaceholderSegmentAsync(repo, download, cts.Token);
 
         var sink = new ScopedSegmentProgressSink(download.Id, _progressSink);
         long lastBytes = 0;

@@ -108,6 +108,91 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
         return new YtDlpRunResult(success, finalPath, process.ExitCode, message);
     }
 
+    public async Task<YtDlpFormatListResult> ListFormatsAsync(
+        YtDlpFormatListRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.YtDlpPath) || !File.Exists(request.YtDlpPath))
+        {
+            return new YtDlpFormatListResult(false, null, Array.Empty<YtDlpFormatOption>(),
+                $"yt-dlp.exe not found at '{request.YtDlpPath ?? "(none)"}'. Configure it in Settings → Video downloader.");
+        }
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = request.YtDlpPath,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        // -J → dump full info as JSON to stdout. --no-warnings keeps stderr
+        // quiet so we don't mis-attribute non-fatal stuff to a real error.
+        // --no-playlist makes a playlist URL probe ONLY the first video,
+        // matching what the user expects when they pick a format.
+        psi.ArgumentList.Add("-J");
+        psi.ArgumentList.Add("--no-warnings");
+        psi.ArgumentList.Add("--no-playlist");
+        psi.ArgumentList.Add("--");
+        psi.ArgumentList.Add(request.Url);
+
+        _logger.LogInformation("Probing yt-dlp formats for {Url}", request.Url);
+
+        using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        try
+        {
+            if (!process.Start())
+            {
+                return new YtDlpFormatListResult(false, null, Array.Empty<YtDlpFormatOption>(),
+                    "Failed to start yt-dlp process.");
+            }
+        }
+        catch (Exception ex)
+        {
+            return new YtDlpFormatListResult(false, null, Array.Empty<YtDlpFormatOption>(),
+                $"Failed to start yt-dlp: {ex.Message}");
+        }
+
+        // Read stdout + stderr concurrently so neither blocks the other if
+        // yt-dlp emits a large JSON payload (some YouTube videos have
+        // hundreds of formats).
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+            return new YtDlpFormatListResult(false, null, Array.Empty<YtDlpFormatOption>(), "Canceled");
+        }
+
+        var stdout = await stdoutTask.ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0)
+        {
+            var msg = string.IsNullOrWhiteSpace(stderr)
+                ? $"yt-dlp exited with code {process.ExitCode}"
+                : stderr.Trim();
+            return new YtDlpFormatListResult(false, null, Array.Empty<YtDlpFormatOption>(), msg);
+        }
+
+        try
+        {
+            var (title, formats) = YtDlpFormatJsonParser.Parse(stdout);
+            return new YtDlpFormatListResult(true, title, formats, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "yt-dlp -J output could not be parsed");
+            return new YtDlpFormatListResult(false, null, Array.Empty<YtDlpFormatOption>(),
+                $"Could not parse yt-dlp output: {ex.Message}");
+        }
+    }
+
     private static void BuildArgs(System.Collections.ObjectModel.Collection<string> args, YtDlpRunRequest request)
     {
         args.Add("--newline");
@@ -118,12 +203,27 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
         args.Add("--print");
         args.Add($"after_move:{FinalPathPrefix}%(filepath)s");
         args.Add("--no-warnings");
+        // Critical: YouTube radio / playlist URLs (?list=…&start_radio=1)
+        // make yt-dlp pull every entry in the list by default. The user
+        // picked one video; without this flag, SIDM would queue dozens of
+        // unrelated files. Matches the behavior of --no-playlist we
+        // already pass during ListFormatsAsync so probing and downloading
+        // see the same single video.
+        args.Add("--no-playlist");
 
         args.Add("-o");
         args.Add(Path.Combine(request.OutputDirectory, "%(title)s.%(ext)s"));
 
         args.Add("-f");
         args.Add(request.FormatSelector ?? "bestvideo*+bestaudio/best");
+
+        // Force a single .mp4 output when the chosen format is video+audio
+        // that yt-dlp has to merge (i.e. selectors using +bestaudio, or
+        // any DASH-only video stream). Without this, yt-dlp picks
+        // .mkv / .webm and — worse — falls back to keeping the streams
+        // SEPARATE when ffmpeg isn't on PATH, producing two files.
+        args.Add("--merge-output-format");
+        args.Add("mp4");
 
         if (!string.IsNullOrWhiteSpace(request.FfmpegPath))
         {

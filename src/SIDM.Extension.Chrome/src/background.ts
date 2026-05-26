@@ -15,12 +15,34 @@ import {
     type DownloadResponse,
     type ErrorMessage,
     type IpcMessage,
+    type ListFormatsResponse,
     NATIVE_HOST_ID,
 } from './ipc';
 import { installSniffer } from './sniffer';
 
 const CLIENT_NAME = 'SIDM-Chrome-Extension';
 const CLIENT_VERSION = chrome.runtime.getManifest().version;
+
+/**
+ * Returns true when SIDM bundles a strictly newer extension than the one
+ * currently loaded. Plain dotted-int compare ("0.1.16" < "0.1.17";
+ * "0.2.0" > "0.1.99"). Pre-release suffixes fall back to ordinal compare
+ * on the leftover — close enough for the upgrade signal.
+ */
+function isExtensionOutdated(installed: string, bundled: string): boolean {
+    if (!installed || !bundled || installed === bundled) return false;
+    const splitNums = (v: string): number[] =>
+        v.split(/[^0-9]+/).filter(s => s.length > 0).map(s => parseInt(s, 10));
+    const a = splitNums(installed);
+    const b = splitNums(bundled);
+    const len = Math.max(a.length, b.length);
+    for (let i = 0; i < len; i++) {
+        const x = a[i] ?? 0;
+        const y = b[i] ?? 0;
+        if (x !== y) return x < y;
+    }
+    return installed < bundled;
+}
 
 interface SidmSettings {
     captureEnabled: boolean;
@@ -36,6 +58,18 @@ const DEFAULT_SETTINGS: SidmSettings = {
 
 let port: chrome.runtime.Port | null = null;
 
+/**
+ * Promises waiting for a `list-formats-response` from the native host. Keyed
+ * by the URL we asked about so concurrent picker windows don't clobber each
+ * other's replies. Errors get pushed in the second slot — when the native
+ * host returns an `error` between request and response, we resolve all
+ * outstanding picker promises with the error so spinners stop.
+ */
+const pendingFormatLookups = new Map<string, {
+    resolve: (resp: ListFormatsResponse) => void;
+    reject: (err: ErrorMessage) => void;
+}>();
+
 function ensurePort(): chrome.runtime.Port {
     if (port) return port;
 
@@ -44,9 +78,35 @@ function ensurePort(): chrome.runtime.Port {
     port.onMessage.addListener((msg: IpcMessage) => {
         if (msg.type === 'hello-response') {
             console.log('[SIDM] Connected to', msg.appName, msg.appVersion);
+            // Self-reload when SIDM bundles a newer extension than the
+            // one Chrome currently has loaded in memory. SIDM's
+            // auto-extract on startup has already overwritten the
+            // unpacked-extension folder with the new files; reloading
+            // makes Chrome pick them up without the user having to
+            // visit chrome://extensions/.
+            if (msg.bundledExtensionVersion &&
+                isExtensionOutdated(CLIENT_VERSION, msg.bundledExtensionVersion)) {
+                console.log(
+                    `[SIDM] Self-reload: installed v${CLIENT_VERSION} < bundled v${msg.bundledExtensionVersion}`);
+                chrome.runtime.reload();
+                return;
+            }
         } else if (msg.type === 'download-response') {
             handleDownloadAck(msg);
+        } else if (msg.type === 'list-formats-response') {
+            const pending = pendingFormatLookups.get(msg.url);
+            if (pending) {
+                pendingFormatLookups.delete(msg.url);
+                pending.resolve(msg);
+            }
         } else if (msg.type === 'error') {
+            // An error after a list-formats request usually IS the list-formats
+            // reply — fail every pending picker so the user sees the message
+            // rather than a forever-spinner.
+            if (pendingFormatLookups.size > 0) {
+                for (const [, p] of pendingFormatLookups) p.reject(msg);
+                pendingFormatLookups.clear();
+            }
             handleHostError(msg);
         }
     });
@@ -230,15 +290,64 @@ installSniffer();
 // native messaging port. Keeping the post split this way lets the popup
 // stay alive only long enough to gather context, then close.
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type !== 'sidm:capture-manifest') return false;
-    const request = message.request as DownloadRequest;
-    try {
-        ensurePort().postMessage(request);
-        sendResponse({ ok: true });
-    } catch (e) {
-        sendResponse({ ok: false, error: String(e) });
+    // Plain capture (existing).
+    if (message?.type === 'sidm:capture-manifest') {
+        const request = message.request as DownloadRequest;
+        try {
+            ensurePort().postMessage(request);
+            sendResponse({ ok: true });
+        } catch (e) {
+            sendResponse({ ok: false, error: String(e) });
+        }
+        return true;
     }
-    return true; // keep the message channel alive for the async response
+
+    // Content-script overlay → "open the format-picker for this URL".
+    // Opens picker.html as a small popup window; the picker UI then asks
+    // back for the format list via 'sidm:list-formats'.
+    if (message?.type === 'sidm:open-picker') {
+        const url = String(message.url ?? '');
+        if (!url) { sendResponse({ ok: false, error: 'no url' }); return true; }
+        const target = chrome.runtime.getURL('picker.html') +
+            '?url=' + encodeURIComponent(url);
+        chrome.windows.create({
+            url: target,
+            type: 'popup',
+            width: 480,
+            height: 600,
+        }).then(() => sendResponse({ ok: true }),
+                (e) => sendResponse({ ok: false, error: String(e) }));
+        return true;
+    }
+
+    // Picker → "probe formats". Replies asynchronously with either a
+    // ListFormatsResponse or an ErrorMessage. We correlate by URL.
+    if (message?.type === 'sidm:list-formats') {
+        const url = String(message.url ?? '');
+        if (!url) { sendResponse({ ok: false, error: 'no url' }); return true; }
+
+        // De-dupe: if another picker is already waiting on this URL, piggy-back.
+        if (pendingFormatLookups.has(url)) {
+            sendResponse({ ok: false, error: 'A probe for this URL is already in flight.' });
+            return true;
+        }
+
+        new Promise<ListFormatsResponse>((resolve, reject) => {
+            pendingFormatLookups.set(url, { resolve, reject });
+            try {
+                ensurePort().postMessage({ type: 'list-formats', url });
+            } catch (e) {
+                pendingFormatLookups.delete(url);
+                reject({ type: 'error', reason: 'NoNativeHost', detail: String(e) });
+            }
+        }).then(
+            (resp) => sendResponse({ ok: true, response: resp }),
+            (err) => sendResponse({ ok: false, error: err.reason ?? 'failed', detail: err.detail }),
+        );
+        return true;
+    }
+
+    return false;
 });
 
 // (No chrome.action.onClicked listener — the manifest declares default_popup

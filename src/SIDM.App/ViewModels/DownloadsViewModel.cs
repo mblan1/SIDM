@@ -246,6 +246,21 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             dialog.ViewModel.ExpectedLength = seed.ExpectedLength;
             dialog.ViewModel.Mime = seed.Mime;
 
+            // Surface the yt-dlp format the user picked in the browser
+            // overlay, if any. The picker passes both the format selector
+            // (sent to yt-dlp) and a pretty label (shown read-only in the
+            // dialog) so the user sees exactly what they're about to fetch.
+            // Use IsNullOrWhiteSpace (not ??) so an older extension that
+            // sends an empty-string label still gets a useful fallback.
+            if (!string.IsNullOrEmpty(seed.YtDlpFormat))
+            {
+                dialog.ViewModel.YtDlpFormat = seed.YtDlpFormat;
+                var label = string.IsNullOrWhiteSpace(seed.YtDlpFormatLabel)
+                    ? seed.YtDlpFormat
+                    : seed.YtDlpFormatLabel;
+                dialog.ViewModel.YtDlpFormatLabel = label;
+            }
+
             // Pre-fill the folder: priority is
             //   1) explicitly-remembered folder for this extension (user's history),
             //   2) category default path for this extension,
@@ -341,6 +356,16 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             : YouTubeUrlDetector.IsVideoUrl(vm.Url) ? SourceKind.YouTube
             : SourceKind.Direct;
 
+        // If the user picked a format in the browser overlay, force the
+        // YouTube/yt-dlp route — the format selector is only meaningful
+        // for that path. This also covers any sites where YouTubeUrlDetector
+        // doesn't fire (e.g. picker was triggered manually) but the user
+        // explicitly asked for yt-dlp by picking a format.
+        if (!string.IsNullOrEmpty(vm.YtDlpFormat))
+        {
+            sourceKind = SourceKind.YouTube;
+        }
+
         var download = new Download
         {
             Url = vm.Url,
@@ -355,6 +380,7 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             SourceKind = sourceKind,
             HeadersJson = headers is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(headers) : null,
             CookiesJson = seed?.Cookies is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(seed.Cookies) : null,
+            SelectedYtDlpFormat = string.IsNullOrEmpty(vm.YtDlpFormat) ? null : vm.YtDlpFormat,
         };
 
         long id;
@@ -503,9 +529,55 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             // .sidmpart; a completed one leaves only the final file.
             await TryDeleteWithRetryAsync(path);
             await TryDeleteWithRetryAsync(path + ".sidmpart");
+
+            // For yt-dlp / HLS / DASH downloads, the engine never wrote to
+            // row.TargetPath — yt-dlp uses its own %(title)s template, so
+            // the only on-disk leftovers are .part / .ytdl scratch files
+            // inside the output folder. Sweep them, scoped to "modified
+            // recently" so we don't touch the user's other downloads.
+            await SweepYtDlpPartialsAsync(path);
         }
 
         StatusBarText = deleteFile ? $"Removed and deleted {fileName}" : $"Removed {fileName}";
+    }
+
+    /// <summary>
+    /// Removes <c>*.part</c> and <c>*.ytdl</c> files in the row's output
+    /// directory that were modified in the last hour. yt-dlp uses these
+    /// as scratch during in-progress downloads (one per video/audio
+    /// stream pre-merge, plus a metadata sidecar). Time-window scoping
+    /// keeps the sweep from clobbering an unrelated download that
+    /// happens to be in the same folder.
+    /// </summary>
+    private async Task SweepYtDlpPartialsAsync(string targetPath)
+    {
+        var outputDir = Path.GetDirectoryName(targetPath);
+        if (string.IsNullOrWhiteSpace(outputDir) || !Directory.Exists(outputDir)) return;
+
+        var cutoff = DateTime.UtcNow.AddHours(-1);
+        try
+        {
+            foreach (var pattern in new[] { "*.part", "*.ytdl" })
+            {
+                foreach (var file in Directory.GetFiles(outputDir, pattern))
+                {
+                    try
+                    {
+                        var info = new FileInfo(file);
+                        if (info.LastWriteTimeUtc < cutoff) continue;
+                        await TryDeleteWithRetryAsync(file);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Couldn't inspect partial {File}", file);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Sweep failed for {Dir}", outputDir);
+        }
     }
 
     /// <summary>

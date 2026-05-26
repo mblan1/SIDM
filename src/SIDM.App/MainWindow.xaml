@@ -193,10 +193,68 @@
                       ColumnHeaderHeight="32"
                       VerticalGridLinesBrush="Transparent"
                       HorizontalGridLinesBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+                <DataGrid.Resources>
+                    <!-- DataGridTextColumn renders its values as auto-generated
+                         TextBlocks that ignore the cell's VerticalContentAlignment.
+                         Force every cell-level TextBlock to center vertically so
+                         the Size/Status/Time left/etc rows line up with the
+                         icon+text File Name column (which already aligns center). -->
+                    <Style TargetType="TextBlock">
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+
+                    <!-- Right-click actions on a download row. The ContextMenu
+                         lives in resources (rather than inline in the Style
+                         Setter) because WPF won't accept Click handlers on
+                         MenuItems nested in a Setter.Value. x:Shared=False
+                         hands each row a fresh ContextMenu instance so its
+                         DataContext (the row VM) doesn't get crossed wires. -->
+                    <ContextMenu x:Key="DownloadRowContextMenu" x:Shared="False">
+                        <MenuItem Header="Open file" Click="OnContextOpenFile">
+                            <MenuItem.Icon>
+                                <ui:SymbolIcon Symbol="Open24" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Open file location" Click="OnContextOpenFolder">
+                            <MenuItem.Icon>
+                                <ui:SymbolIcon Symbol="FolderOpen24" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <Separator />
+                        <MenuItem Header="Pause" Click="OnContextPause">
+                            <MenuItem.Icon>
+                                <ui:SymbolIcon Symbol="Pause24" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Resume" Click="OnContextResume">
+                            <MenuItem.Icon>
+                                <ui:SymbolIcon Symbol="Play24" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <Separator />
+                        <MenuItem Header="Copy URL" Click="OnContextCopyUrl">
+                            <MenuItem.Icon>
+                                <ui:SymbolIcon Symbol="Copy24" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Properties" Click="OnContextProperties">
+                            <MenuItem.Icon>
+                                <ui:SymbolIcon Symbol="Info24" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <Separator />
+                        <MenuItem Header="Remove…" Click="OnContextRemove">
+                            <MenuItem.Icon>
+                                <ui:SymbolIcon Symbol="Delete24" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                    </ContextMenu>
+                </DataGrid.Resources>
                 <DataGrid.RowStyle>
                     <Style TargetType="DataGridRow">
                         <Setter Property="Background" Value="Transparent" />
                         <EventSetter Event="MouseDoubleClick" Handler="OnRowDoubleClick" />
+                        <Setter Property="ContextMenu" Value="{StaticResource DownloadRowContextMenu}" />
                     </Style>
                 </DataGrid.RowStyle>
                 <DataGrid.CellStyle>

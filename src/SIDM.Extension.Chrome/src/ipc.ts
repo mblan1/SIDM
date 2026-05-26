@@ -8,6 +8,8 @@ export type IpcMessage =
     | HelloResponse
     | DownloadRequest
     | DownloadResponse
+    | ListFormatsRequest
+    | ListFormatsResponse
     | ErrorMessage;
 
 export interface HelloRequest {
@@ -21,6 +23,14 @@ export interface HelloResponse {
     appName: string;
     appVersion: string;
     capabilities: string[];
+    /**
+     * Version of the extension that SIDM has bundled inside its app folder
+     * — set by SIDM 0.1.18 and newer. When this is greater than the
+     * extension's own manifest.version, the extension self-reloads via
+     * chrome.runtime.reload() so SIDM's auto-extract takes effect without
+     * the user touching chrome://extensions/.
+     */
+    bundledExtensionVersion?: string;
 }
 
 export interface DownloadRequest {
@@ -34,12 +44,45 @@ export interface DownloadRequest {
     userAgent?: string;
     expectedLength?: number;
     mime?: string;
+    /** yt-dlp -f selector, e.g. "137+bestaudio/best". Set by the format picker. */
+    ytDlpFormat?: string;
+    /** Human-readable label for the chosen format ("1080p MP4 · ~145 MB"). */
+    ytDlpFormatLabel?: string;
 }
 
 export interface DownloadResponse {
     type: 'download-response';
     downloadId: number;
     status: string;
+}
+
+/** Ask SIDM to run `yt-dlp -J <url>` and reply with available formats. */
+export interface ListFormatsRequest {
+    type: 'list-formats';
+    url: string;
+}
+
+/** Reply to ListFormatsRequest: video title + curated format rows. */
+export interface ListFormatsResponse {
+    type: 'list-formats-response';
+    url: string;
+    title?: string;
+    formats: FormatOption[];
+}
+
+export interface FormatOption {
+    formatId: string;
+    /** "video" or "audio". */
+    kind: 'video' | 'audio';
+    /** Ready-to-render row label ("1080p", "Opus · 256k"). */
+    label: string;
+    ext: string;
+    vcodec?: string;
+    acodec?: string;
+    height?: number;
+    fps?: number;
+    audioBitrateKbps?: number;
+    fileSize?: number;
 }
 
 export interface ErrorMessage {

@@ -68,10 +68,10 @@
 
             <StackPanel Margin="0,16,0,0"
                         Visibility="{Binding IsVideoUrl, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Border Background="#22FF8C00" CornerRadius="4" Padding="8,6">
+                <Border Background="#22FF8C00" CornerRadius="6" Padding="12,10">
                     <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Video24" Margin="0,0,8,0" />
-                        <TextBlock VerticalAlignment="Center" FontSize="12">
+                        <ui:SymbolIcon Symbol="Video24" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap">
                             <Run Text="Video URL detected — will download via yt-dlp." />
                         </TextBlock>
                     </StackPanel>
@@ -80,10 +80,10 @@
 
             <StackPanel Margin="0,16,0,0"
                         Visibility="{Binding IsHlsUrl, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Border Background="#2200B8D4" CornerRadius="4" Padding="8,6">
+                <Border Background="#2200B8D4" CornerRadius="6" Padding="12,10">
                     <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Stream24" Margin="0,0,8,0" />
-                        <TextBlock VerticalAlignment="Center" FontSize="12">
+                        <ui:SymbolIcon Symbol="Stream24" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap">
                             <Run Text="HLS playlist detected — segments will be fetched in parallel and concatenated to .ts." />
                         </TextBlock>
                     </StackPanel>
@@ -92,12 +92,30 @@
 
             <StackPanel Margin="0,16,0,0"
                         Visibility="{Binding IsDashUrl, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Border Background="#22008B6E" CornerRadius="4" Padding="8,6">
+                <Border Background="#22008B6E" CornerRadius="6" Padding="12,10">
                     <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Stream24" Margin="0,0,8,0" />
-                        <TextBlock VerticalAlignment="Center" FontSize="12">
+                        <ui:SymbolIcon Symbol="Stream24" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap">
                             <Run Text="DASH manifest detected — video + audio tracks will be fetched and muxed to .mp4 (ffmpeg required for muxing)." />
                         </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Format row — populated when the user picked a resolution /
+                 audio bitrate via the browser-overlay format picker. yt-dlp
+                 will be invoked with this exact selector. Hidden otherwise. -->
+            <StackPanel Margin="0,16,0,0"
+                        Visibility="{Binding HasYtDlpFormat, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Border Background="#22F0A020" CornerRadius="6" Padding="14,12">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Cloud24" Margin="0,0,12,0" VerticalAlignment="Top" />
+                        <StackPanel>
+                            <TextBlock Text="Format chosen from the in-browser picker:"
+                                       FontSize="11" Opacity="0.75" />
+                            <TextBlock Text="{Binding YtDlpFormatLabel}"
+                                       FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>

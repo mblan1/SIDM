@@ -23,6 +23,13 @@ public sealed class BrowserExtensionPresence
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BrowserExtensionPresence> _logger;
     private readonly ConcurrentDictionary<BrowserKind, DateTimeOffset?> _lastSeen = new();
+    /// <summary>
+    /// Last <c>clientVersion</c> reported by each browser's extension via
+    /// the IPC hello handshake. Used by the install dialog to render
+    /// "installed 0.1.4 → bundled 0.1.5" and flip the action button to
+    /// "Update" when the user is on an older build.
+    /// </summary>
+    private readonly ConcurrentDictionary<BrowserKind, string?> _lastSeenVersion = new();
 
     public BrowserExtensionPresence(IServiceScopeFactory scopeFactory, ILogger<BrowserExtensionPresence> logger)
     {
@@ -42,9 +49,10 @@ public sealed class BrowserExtensionPresence
             var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
             foreach (var kind in Enum.GetValues<BrowserKind>())
             {
-                var key = KeyFor(kind);
-                var raw = await settings.GetAsync<string>(key, cancellationToken);
+                var raw = await settings.GetAsync<string>(KeyFor(kind), cancellationToken);
                 if (DateTimeOffset.TryParse(raw, out var ts)) _lastSeen[kind] = ts;
+                var ver = await settings.GetAsync<string>(VersionKeyFor(kind), cancellationToken);
+                if (!string.IsNullOrEmpty(ver)) _lastSeenVersion[kind] = ver;
             }
         }
         catch (Exception ex)
@@ -56,6 +64,12 @@ public sealed class BrowserExtensionPresence
     public DateTimeOffset? GetLastSeen(BrowserKind kind) =>
         _lastSeen.TryGetValue(kind, out var ts) ? ts : null;
 
+    /// <summary>Last clientVersion the extension reported via hello, or null
+    /// if no extension has ever connected (or version wasn't recorded yet
+    /// — older builds didn't capture it).</summary>
+    public string? GetLastSeenVersion(BrowserKind kind) =>
+        _lastSeenVersion.TryGetValue(kind, out var v) ? v : null;
+
     public bool IsConnected(BrowserKind kind) =>
         GetLastSeen(kind) is { } ts && (DateTimeOffset.UtcNow - ts) < TimeSpan.FromDays(30);
 
@@ -65,13 +79,27 @@ public sealed class BrowserExtensionPresence
 
     /// <summary>
     /// Called by the IPC dispatcher when a HelloRequest arrives. Updates the
-    /// timestamp and fires <see cref="FirstSeen"/> the first time a given
-    /// kind shows up so the UI can collapse its install banner.
+    /// timestamp + recorded version, and fires <see cref="FirstSeen"/> the
+    /// first time a given kind shows up so the UI can collapse its install
+    /// banner. <see cref="VersionChanged"/> fires whenever the reported
+    /// version differs from what we had on file (covers fresh-install,
+    /// upgrade, and the very rare downgrade).
     /// </summary>
-    public void MarkSeen(BrowserKind kind)
+    public void MarkSeen(BrowserKind kind, string? clientVersion = null)
     {
         var wasFirstSeen = !_lastSeen.ContainsKey(kind) || _lastSeen[kind] is null;
         _lastSeen[kind] = DateTimeOffset.UtcNow;
+
+        var versionChanged = false;
+        if (!string.IsNullOrEmpty(clientVersion))
+        {
+            var previous = _lastSeenVersion.TryGetValue(kind, out var v) ? v : null;
+            if (!string.Equals(previous, clientVersion, StringComparison.Ordinal))
+            {
+                _lastSeenVersion[kind] = clientVersion;
+                versionChanged = true;
+            }
+        }
 
         // Persist on a background task — never block the IPC dispatcher.
         _ = Task.Run(async () =>
@@ -81,6 +109,10 @@ public sealed class BrowserExtensionPresence
                 await using var scope = _scopeFactory.CreateAsyncScope();
                 var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
                 await settings.SetAsync(KeyFor(kind), _lastSeen[kind]!.Value.ToString("o"));
+                if (_lastSeenVersion.TryGetValue(kind, out var v) && !string.IsNullOrEmpty(v))
+                {
+                    await settings.SetAsync(VersionKeyFor(kind), v);
+                }
             }
             catch (Exception ex)
             {
@@ -93,7 +125,21 @@ public sealed class BrowserExtensionPresence
             try { FirstSeen?.Invoke(kind); }
             catch (Exception ex) { _logger.LogDebug(ex, "FirstSeen handler threw for {Kind}", kind); }
         }
+        if (versionChanged)
+        {
+            try { VersionChanged?.Invoke(kind); }
+            catch (Exception ex) { _logger.LogDebug(ex, "VersionChanged handler threw for {Kind}", kind); }
+        }
     }
+
+    /// <summary>
+    /// Raised when the version reported by an extension changes (typical
+    /// trigger: the user clicks Update in the install dialog, reloads the
+    /// extension in Chrome, and the extension reconnects on the new
+    /// version). UI rows subscribe to refresh their "Up to date"/"Update
+    /// available" badge without polling.
+    /// </summary>
+    public event Action<BrowserKind>? VersionChanged;
 
     /// <summary>
     /// Parses the IPC <c>HelloRequest.ClientName</c> into a browser kind.
@@ -113,4 +159,7 @@ public sealed class BrowserExtensionPresence
 
     private static string KeyFor(BrowserKind kind) =>
         SettingKeyPrefix + kind.ToString().ToLowerInvariant() + ".lastSeenUtc";
+
+    private static string VersionKeyFor(BrowserKind kind) =>
+        SettingKeyPrefix + kind.ToString().ToLowerInvariant() + ".lastSeenVersion";
 }

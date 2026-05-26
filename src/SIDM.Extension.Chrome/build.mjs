@@ -8,7 +8,13 @@ rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist', { recursive: true });
 
 const config = {
-  entryPoints: ['src/background.ts', 'src/options.ts', 'src/popup.ts'],
+  entryPoints: [
+    'src/background.ts',
+    'src/options.ts',
+    'src/popup.ts',
+    'src/picker.ts',
+    'src/content.ts',
+  ],
   bundle: true,
   outdir: 'dist',
   format: 'esm',
@@ -32,6 +38,8 @@ copyFileSync('src/options.html', 'dist/options.html');
 copyFileSync('src/options.css', 'dist/options.css');
 copyFileSync('src/popup.html', 'dist/popup.html');
 copyFileSync('src/popup.css', 'dist/popup.css');
+copyFileSync('src/picker.html', 'dist/picker.html');
+copyFileSync('src/picker.css', 'dist/picker.css');
 
 // Icons — the manifest references icons/icon-*.png paths, so the folder
 // has to exist verbatim in dist. (Web Store rejects an upload with a

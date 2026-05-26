@@ -124,6 +124,7 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(SizeDisplay))]
     [NotifyPropertyChangedFor(nameof(DownloadedBytesDisplay))]
     [NotifyPropertyChangedFor(nameof(RemainingBytesDisplay))]
+    [NotifyPropertyChangedFor(nameof(IsIndeterminate))]
     private long _bytesDownloaded;
 
     /// <summary>Just the downloaded byte count, formatted. Used by the progress
@@ -163,21 +164,34 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
         : 0.0;
 
     /// <summary>
-    /// True while the download is active but its total size is unknown — bound
-    /// to <see cref="System.Windows.Controls.ProgressBar.IsIndeterminate"/> so
-    /// the bar animates instead of sitting at 0% (e.g. HLS/DASH playlists
-    /// before all segments report sizes, or HTTP responses with no
-    /// Content-Length).
+    /// Drives <see cref="System.Windows.Controls.ProgressBar.IsIndeterminate"/>.
+    /// True in two cases:
+    ///   1. The download is active but its total size is unknown — HLS/DASH
+    ///      playlists before all segment sizes are known, HTTP responses
+    ///      with no Content-Length, etc.
+    ///   2. The download is actively Queued / Probing / Downloading but no
+    ///      bytes have arrived yet. This is the "warm-up" window — yt-dlp
+    ///      taking ~5 s to probe the URL, HLS parsing the playlist, etc. —
+    ///      where the determinate bar would just sit at 0% and look stuck.
+    /// Either case animates the bar so the user can see the download is
+    /// still working.
     /// </summary>
     public bool IsIndeterminate
     {
         get
         {
-            var sizeKnown = TotalBytes is { } t && t > 0;
-            if (sizeKnown) return false;
-            return Status == DownloadStatus.Downloading
+            var active = Status == DownloadStatus.Downloading
                 || Status == DownloadStatus.Probing
                 || Status == DownloadStatus.Queued;
+            if (!active) return false;
+
+            var sizeKnown = TotalBytes is { } t && t > 0;
+            if (!sizeKnown) return true;
+
+            // Warm-up: size is known (picker provided it, or a probe came back)
+            // but no bytes have transferred yet. Show the spinner so the user
+            // gets a "working…" cue rather than a stuck 0%.
+            return BytesDownloaded == 0;
         }
     }
 

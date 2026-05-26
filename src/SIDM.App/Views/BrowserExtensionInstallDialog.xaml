@@ -58,15 +58,34 @@
                                         <TextBlock Text="{Binding StatusLine}"
                                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                                    FontSize="11" Margin="0,2,0,0" />
+                                        <!-- Version line: shown once the extension has connected at
+                                             least once so we know what's installed. Highlights the
+                                             update target when out of date. -->
+                                        <TextBlock Text="{Binding VersionLine}"
+                                                   Visibility="{Binding VersionLineVisibility}"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                                   FontFamily="Consolas" FontSize="10"
+                                                   Margin="0,4,0,0" />
                                     </StackPanel>
 
-                                    <ui:Button Grid.Column="1"
-                                               VerticalAlignment="Center"
-                                               Content="{Binding ButtonLabel}"
-                                               Appearance="{Binding ButtonAppearance}"
-                                               IsEnabled="{Binding IsButtonEnabled}"
-                                               Tag="{Binding}"
-                                               Click="OnInstallClick" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                VerticalAlignment="Center">
+                                        <!-- Secondary "Reload" action — only meaningful when the
+                                             extension is connected. Lets the user kick the
+                                             extension after manually editing the unpacked folder
+                                             or when it's misbehaving. -->
+                                        <ui:Button Content="Reload"
+                                                   Appearance="Secondary"
+                                                   Margin="0,0,8,0"
+                                                   Tag="{Binding}"
+                                                   Click="OnReloadClick"
+                                                   Visibility="{Binding ShowSecondaryButton, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                        <ui:Button Content="{Binding PrimaryButtonLabel}"
+                                                   Appearance="{Binding PrimaryButtonAppearance}"
+                                                   IsEnabled="{Binding IsPrimaryButtonEnabled}"
+                                                   Tag="{Binding}"
+                                                   Click="OnPrimaryClick" />
+                                    </StackPanel>
                                 </Grid>
                             </Border>
                         </DataTemplate>

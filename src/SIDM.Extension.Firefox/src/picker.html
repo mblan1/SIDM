@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>SIDM — Pick a format</title>
+    <link rel="stylesheet" href="picker.css" />
+</head>
+<body>
+    <header>
+        <div class="title-row">
+            <h1>Download with SIDM</h1>
+        </div>
+        <div id="page-title" class="page-title">Loading…</div>
+        <div id="page-url" class="page-url"></div>
+    </header>
+
+    <main>
+        <section id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Asking yt-dlp for available formats…</p>
+            <p class="hint">First-time probes for a long video can take 5–15 seconds.</p>
+        </section>
+
+        <section id="error" class="error" hidden>
+            <h2>Couldn't list formats</h2>
+            <p id="error-text"></p>
+            <button id="retry">Try again</button>
+        </section>
+
+        <section id="results" hidden>
+            <div class="group">
+                <h2>Video</h2>
+                <ul id="video-list" class="format-list"></ul>
+                <p id="video-empty" class="empty" hidden>No video formats reported.</p>
+            </div>
+            <div class="group">
+                <h2>Audio only</h2>
+                <ul id="audio-list" class="format-list"></ul>
+                <p id="audio-empty" class="empty" hidden>No audio-only formats reported.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <button id="cancel">Cancel</button>
+    </footer>
+
+    <script type="module" src="picker.js"></script>
+</body>
+</html>

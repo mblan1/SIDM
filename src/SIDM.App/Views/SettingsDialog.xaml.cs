@@ -1,4 +1,6 @@
 using System.IO;
+using System.IO.Compression;
+using System.Net.Http;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
@@ -24,6 +26,7 @@ public partial class SettingsDialog : FluentWindow
     private readonly BrowserExtensionInstaller _extensionInstaller;
     private readonly BrowserExtensionPresence _extensionPresence;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public SettingsViewModel ViewModel { get; } = new();
 
@@ -38,7 +41,8 @@ public partial class SettingsDialog : FluentWindow
         CloseBehaviorService closeBehavior,
         BrowserExtensionInstaller extensionInstaller,
         BrowserExtensionPresence extensionPresence,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IHttpClientFactory httpClientFactory)
     {
         InitializeComponent();
         _queue = queue;
@@ -52,6 +56,7 @@ public partial class SettingsDialog : FluentWindow
         _extensionInstaller = extensionInstaller;
         _extensionPresence = extensionPresence;
         _scopeFactory = scopeFactory;
+        _httpClientFactory = httpClientFactory;
         DataContext = ViewModel;
 
         ViewModel.MaxConcurrent = _queue.MaxConcurrent;
@@ -243,6 +248,228 @@ public partial class SettingsDialog : FluentWindow
         ViewModel.YtDlpStatus = version is null
             ? $"{resolved} did not respond to --version."
             : $"OK — yt-dlp {version} at {resolved}";
+    }
+
+    // yt-dlp's stable channel publishes a single Windows .exe asset on every
+    // release tag, mirrored to /latest/. We pin to /latest/ rather than a
+    // version because the rate at which yt-dlp issues patches outpaces our
+    // ability to keep a hardcoded version current.
+    private const string YtDlpReleaseUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
+
+    /// <summary>SIDM-managed install location — matches one of the paths the
+    /// resolver searches, so a successful install is picked up automatically
+    /// when the user override is empty.</summary>
+    private static string ManagedYtDlpPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "SIDM", "bin", "yt-dlp.exe");
+
+    /// <summary>
+    /// Downloads yt-dlp.exe from GitHub Releases into the SIDM-managed bin
+    /// folder. Clears any user-pinned override so the resolver picks up the
+    /// fresh managed copy on the next download.
+    /// </summary>
+    private async void OnInstallYtDlp(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Wpf.Ui.Controls.Button btn) return;
+        var originalContent = btn.Content;
+        btn.IsEnabled = false;
+        btn.Content = "Installing…";
+        ViewModel.YtDlpStatus = $"Downloading yt-dlp.exe from {YtDlpReleaseUrl}…";
+
+        try
+        {
+            var dest = ManagedYtDlpPath;
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            await DownloadFileAsync(YtDlpReleaseUrl, dest);
+
+            // Surface the install location in the path field so the user
+            // can see where the binary landed without having to dig
+            // through %LocalAppData%. Persisted as the override so the
+            // resolver returns the same path on the next download.
+            // Uninstall clears this when it deletes the file.
+            ViewModel.YtDlpPath = dest;
+            await _videoGrabber.SetYtDlpPathAsync(dest);
+
+            var version = await YtDlpPathResolver.TryGetYtDlpVersionAsync(dest);
+            ViewModel.YtDlpStatus = version is null
+                ? $"Installed to {dest}, but it didn't respond to --version."
+                : $"Installed yt-dlp {version} at {dest}";
+        }
+        catch (Exception ex)
+        {
+            ViewModel.YtDlpStatus = $"Install failed: {ex.Message}";
+        }
+        finally
+        {
+            btn.Content = originalContent;
+            btn.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Removes the SIDM-managed yt-dlp.exe (only that one — never deletes a
+    /// user-pinned path). If the user also has an override set pointing at
+    /// the managed location, we clear that too so the UI is self-consistent.
+    /// </summary>
+    private async void OnUninstallYtDlp(object sender, RoutedEventArgs e)
+    {
+        var dest = ManagedYtDlpPath;
+        if (!File.Exists(dest))
+        {
+            ViewModel.YtDlpStatus = "Nothing to uninstall — no SIDM-managed yt-dlp.exe was found.";
+            return;
+        }
+
+        try
+        {
+            File.Delete(dest);
+
+            // If the override points at the now-deleted file, clear it so the
+            // resolver falls through to PATH instead of returning a stale
+            // path that no longer exists.
+            if (string.Equals(ViewModel.YtDlpPath?.Trim(), dest, StringComparison.OrdinalIgnoreCase))
+            {
+                ViewModel.YtDlpPath = string.Empty;
+                await _videoGrabber.SetYtDlpPathAsync(null);
+            }
+
+            ViewModel.YtDlpStatus = BuildResolvedPathStatus();
+        }
+        catch (Exception ex)
+        {
+            ViewModel.YtDlpStatus = $"Uninstall failed: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Re-runs the resolver and rebuilds the status line. Cheap; useful after
+    /// the user installs yt-dlp themselves (via choco / winget) or drops a
+    /// portable copy somewhere on PATH.
+    /// </summary>
+    private void OnRefreshYtDlp(object sender, RoutedEventArgs e)
+    {
+        ViewModel.YtDlpStatus = BuildResolvedPathStatus();
+    }
+
+    /// <summary>
+    /// Plain streamed download — same pattern as <see cref="BrowserExtensionInstaller"/>.
+    /// Writes to a <c>.partial</c> sidecar and moves on completion so a
+    /// crash mid-download doesn't leave a half-written exe.
+    /// </summary>
+    private async Task DownloadFileAsync(string url, string destination)
+    {
+        var client = _httpClientFactory.CreateClient("sidm-download");
+        client.Timeout = TimeSpan.FromMinutes(10);
+
+        using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+
+        var tempPath = destination + ".partial";
+        await using (var src = await response.Content.ReadAsStreamAsync())
+        await using (var dst = File.Create(tempPath))
+        {
+            await src.CopyToAsync(dst);
+        }
+
+        if (File.Exists(destination)) File.Delete(destination);
+        File.Move(tempPath, destination);
+    }
+
+    // ---- ffmpeg manage actions ------------------------------------------
+
+    // yt-dlp/FFmpeg-Builds publishes a static Windows build on every rolling
+    // "latest" tag. We pull the smaller "essentials" zip and pluck out just
+    // bin/ffmpeg.exe — yt-dlp doesn't need ffprobe/ffplay for muxing video+audio.
+    private const string FfmpegReleaseUrl =
+        "https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip";
+
+    private static string ManagedFfmpegPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "SIDM", "bin", "ffmpeg.exe");
+
+    /// <summary>
+    /// Downloads the yt-dlp/FFmpeg-Builds zip and extracts ONLY bin/ffmpeg.exe
+    /// into the SIDM-managed bin folder. The other binaries (ffprobe, ffplay)
+    /// aren't needed for yt-dlp's video+audio merge and would just bloat disk.
+    /// </summary>
+    private async void OnInstallFfmpeg(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Wpf.Ui.Controls.Button btn) return;
+        var originalContent = btn.Content;
+        btn.IsEnabled = false;
+        btn.Content = "Installing…";
+        ViewModel.YtDlpStatus = "Downloading ffmpeg (this is a ~70 MB zip)…";
+
+        var tempZip = Path.Combine(Path.GetTempPath(), $"sidm-ffmpeg-{Guid.NewGuid():N}.zip");
+        try
+        {
+            await DownloadFileAsync(FfmpegReleaseUrl, tempZip);
+            ViewModel.YtDlpStatus = "Extracting ffmpeg.exe from the bundle…";
+
+            Directory.CreateDirectory(Path.GetDirectoryName(ManagedFfmpegPath)!);
+
+            using (var archive = System.IO.Compression.ZipFile.OpenRead(tempZip))
+            {
+                // Zip layout: ffmpeg-master-2026-…-gpl/bin/ffmpeg.exe
+                var entry = archive.Entries.FirstOrDefault(en =>
+                    en.FullName.Replace('\\', '/').EndsWith("/bin/ffmpeg.exe", StringComparison.OrdinalIgnoreCase));
+                if (entry is null)
+                {
+                    ViewModel.YtDlpStatus =
+                        "Install failed: the downloaded zip didn't contain bin/ffmpeg.exe.";
+                    return;
+                }
+                if (File.Exists(ManagedFfmpegPath)) File.Delete(ManagedFfmpegPath);
+                entry.ExtractToFile(ManagedFfmpegPath);
+            }
+
+            // Surface the install location in the path field. Same
+            // reasoning as the yt-dlp install: makes it obvious where the
+            // binary landed, and Uninstall clears it when it deletes.
+            ViewModel.FfmpegPath = ManagedFfmpegPath;
+            await _videoGrabber.SetFfmpegPathAsync(ManagedFfmpegPath);
+
+            ViewModel.YtDlpStatus = $"Installed ffmpeg at {ManagedFfmpegPath}";
+        }
+        catch (Exception ex)
+        {
+            ViewModel.YtDlpStatus = $"ffmpeg install failed: {ex.Message}";
+        }
+        finally
+        {
+            try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { /* tmp leak ok */ }
+            btn.Content = originalContent;
+            btn.IsEnabled = true;
+        }
+    }
+
+    private async void OnUninstallFfmpeg(object sender, RoutedEventArgs e)
+    {
+        var dest = ManagedFfmpegPath;
+        if (!File.Exists(dest))
+        {
+            ViewModel.YtDlpStatus = "Nothing to uninstall — no SIDM-managed ffmpeg.exe was found.";
+            return;
+        }
+        try
+        {
+            File.Delete(dest);
+            if (string.Equals(ViewModel.FfmpegPath?.Trim(), dest, StringComparison.OrdinalIgnoreCase))
+            {
+                ViewModel.FfmpegPath = string.Empty;
+                await _videoGrabber.SetFfmpegPathAsync(null);
+            }
+            ViewModel.YtDlpStatus = BuildResolvedPathStatus();
+        }
+        catch (Exception ex)
+        {
+            ViewModel.YtDlpStatus = $"ffmpeg uninstall failed: {ex.Message}";
+        }
+    }
+
+    private void OnRefreshFfmpeg(object sender, RoutedEventArgs e)
+    {
+        ViewModel.YtDlpStatus = BuildResolvedPathStatus();
     }
 
     private static string TryGetDirectory(string? path)
