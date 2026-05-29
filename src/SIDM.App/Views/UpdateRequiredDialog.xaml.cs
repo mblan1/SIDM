@@ -62,7 +62,16 @@ public partial class UpdateRequiredDialog : FluentWindow
             return;
         }
 
-        ProgressText.Text = "Installing and restarting…";
+        // Walk the install stages. The download above is the only phase we get
+        // live progress for; the unpack/install/cleanup happen in Velopack's
+        // Update.exe after this process exits, so we surface them as a short
+        // labelled sequence with an indeterminate bar before handing off.
+        DownloadProgress.IsIndeterminate = true;
+        await ShowStageAsync("Verifying download…");
+        await ShowStageAsync("Unpacking…");
+        await ShowStageAsync("Installing…");
+        await ShowStageAsync("Cleaning up old files…");
+        ProgressText.Text = "Restarting SIDM…";
 
         // Applies the pending update and restarts — this call does not return
         // on success (Velopack terminates the process). If it returns false,
@@ -70,9 +79,19 @@ public partial class UpdateRequiredDialog : FluentWindow
         if (!_updater.ApplyPendingAndRestart())
         {
             ProgressText.Text = "Could not apply the update. Try again or exit.";
+            DownloadProgress.IsIndeterminate = false;
             UpdateButton.IsEnabled = true;
             ExitButton.IsEnabled = true;
         }
+    }
+
+    /// <summary>Shows one install-stage label briefly so the sequence is
+    /// readable. Honest about the work Velopack is about to do on apply.</summary>
+    private async Task ShowStageAsync(string label)
+    {
+        ProgressText.Text = label;
+        try { await Task.Delay(650, _cts.Token); }
+        catch (OperationCanceledException) { }
     }
 
     private void OnExit(object sender, RoutedEventArgs e)

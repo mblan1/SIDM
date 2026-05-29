@@ -215,7 +215,14 @@ public partial class SettingsDialog : FluentWindow
             return;
         }
 
-        ViewModel.UpdateStatus = "Installing and restarting…";
+        // Staged labels for the install phases Velopack runs on apply.
+        foreach (var stage in new[] { "Verifying download…", "Unpacking…", "Installing…", "Cleaning up old files…" })
+        {
+            ViewModel.UpdateStatus = stage;
+            await Task.Delay(650);
+        }
+        ViewModel.UpdateStatus = "Restarting SIDM…";
+
         if (!_updater.ApplyPendingAndRestart())
         {
             ViewModel.UpdateStatus = "Could not apply the update.";
