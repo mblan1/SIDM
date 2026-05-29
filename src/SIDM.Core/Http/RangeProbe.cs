@@ -105,6 +105,41 @@ public sealed class RangeProbe : IRangeProbe
             HashAlgo: hashAlgo);
     }
 
+    public async Task<string?> ProbeFileNameAsync(
+        Uri url,
+        IReadOnlyDictionary<string, string>? requestHeaders,
+        IReadOnlyDictionary<string, string>? cookies,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient(HttpClientName);
+            using var head = await SendAsync(client, HttpMethod.Head, url, requestHeaders, cookies,
+                range: null, cancellationToken);
+
+            // Prefer the Content-Disposition filename — that's the only
+            // reliable source for CDN-redirect URLs (GitHub release assets,
+            // signed S3 links) whose path ends in an opaque id. Only return
+            // it when it actually came from the header; the URL-segment
+            // fallback is the caller's job (and is what we're trying to
+            // improve on).
+            if (head.IsSuccessStatusCode)
+            {
+                var cd = head.Content.Headers.ContentDisposition;
+                var name = (cd?.FileNameStar ?? cd?.FileName)?.Trim().Trim('"');
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Filename HEAD probe failed for {Url}", url);
+        }
+        return null;
+    }
+
     private static async Task<HttpResponseMessage> SendAsync(
         HttpClient client,
         HttpMethod method,

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -13,9 +14,21 @@ namespace SIDM.App;
 
 public partial class App : Application
 {
+    // Per-user single-instance primitives. The Mutex detects "another SIDM is
+    // already running"; the EventWaitHandle lets a second (manual) launch ask
+    // the primary instance to surface its main window before exiting.
+    private const string SingleInstanceMutexName = @"Local\SIDM.App.SingleInstance";
+    private const string ShowMainWindowEventName = @"Local\SIDM.App.ShowMainWindow";
+
     private readonly IHost? _host;
     private readonly string[] _cliArgs;
     private readonly bool _isCliMode;
+    /// <summary>True when launched by SIDM.BrowserHost just to capture a
+    /// download (via the <c>--background</c> flag) — the main window is
+    /// suppressed and a tray cue is shown instead.</summary>
+    private readonly bool _startHidden;
+    private Mutex? _singleInstanceMutex;
+    private EventWaitHandle? _showMainWindowEvent;
 
     public App()
     {
@@ -36,6 +49,31 @@ public partial class App : Application
             // No log file, no IHost — just enough infrastructure to run the
             // command and exit. Output goes to stderr so it shows in the parent
             // shell when invoked via `SIDM.App.exe --register-hosts`.
+            return;
+        }
+
+        // BrowserHost passes --background when it cold-launches us just to
+        // capture a download. In that mode we don't show the main window.
+        _startHidden = _cliArgs.Contains("--background");
+
+        // Single-instance gate. If another SIDM is already running, hand off
+        // to it instead of spinning up a duplicate (the "two main windows"
+        // bug). A manual launch asks the primary to surface its main window;
+        // a --background launch just exits (the primary's IPC pipe will get
+        // the download from BrowserHost's retry-connect).
+        _singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out var isPrimary);
+        _showMainWindowEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowMainWindowEventName);
+        if (!isPrimary)
+        {
+            if (!_startHidden)
+            {
+                try { _showMainWindowEvent.Set(); } catch { /* best-effort */ }
+            }
+            _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+            // Shutdown(0) here would still spin up WPF; Environment.Exit is the
+            // cleanest way to bail before any window/host is built.
+            Environment.Exit(0);
             return;
         }
 
@@ -159,15 +197,65 @@ public partial class App : Application
         // know up-front which browser kinds have ever connected.
         await _host.Services.GetRequiredService<Services.BrowserExtensionPresence>().LoadAsync();
 
-        var mainWindow = _host.Services.GetRequiredService<MainWindow>();
-        mainWindow.Show();
-
-        // Tray icon stays alive for the whole process — initialize after
-        // MainWindow exists so the tray's "Open SIDM" item can target it.
-        // Switching ShutdownMode to explicit means hiding MainWindow does
-        // NOT trigger an OnLastWindowClose shutdown.
+        // Switch to explicit shutdown BEFORE (maybe) skipping the main window
+        // show — otherwise, in --background mode with no visible window, WPF's
+        // default OnLastWindowClose would shut us down before the download
+        // dialog ever appears.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        _host.Services.GetRequiredService<Services.TrayIconService>().Initialize(mainWindow);
+
+        // Always create the main window so the tray "Open SIDM" item and the
+        // single-instance "show main window" signal have something to surface.
+        // Only actually SHOW it for a normal (manual) launch.
+        var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+        var tray = _host.Services.GetRequiredService<Services.TrayIconService>();
+        tray.Initialize(mainWindow);
+
+        if (_startHidden)
+        {
+            // Cold launch just to capture a browser download — keep the main
+            // window hidden and show a tray cue while the IPC download arrives
+            // and opens the Add-download dialog.
+            tray.ShowOpeningCue();
+        }
+        else
+        {
+            mainWindow.Show();
+        }
+
+        // Listen for a second (manual) instance asking us to surface the main
+        // window. Background thread blocks on the named event; on signal we
+        // marshal to the UI thread and show/activate the window.
+        StartShowMainWindowListener(tray);
+    }
+
+    /// <summary>
+    /// Spawns a background thread that waits on the cross-process
+    /// <see cref="ShowMainWindowEventName"/> event. A second instance launched
+    /// manually (Start-menu / shortcut) sets it instead of opening its own
+    /// window, so the already-running instance comes to the foreground.
+    /// </summary>
+    private void StartShowMainWindowListener(Services.TrayIconService tray)
+    {
+        if (_showMainWindowEvent is null) return;
+        var thread = new Thread(() =>
+        {
+            while (true)
+            {
+                try
+                {
+                    if (!_showMainWindowEvent.WaitOne()) return;
+                    tray.ShowMainWindow();
+                }
+                catch (ObjectDisposedException) { return; }
+                catch (AbandonedMutexException) { /* ignore */ }
+                catch { return; }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "SIDM-ShowMainWindow-Listener",
+        };
+        thread.Start();
     }
 
     protected override async void OnExit(ExitEventArgs e)
@@ -196,6 +284,17 @@ public partial class App : Application
             await _host.StopAsync(TimeSpan.FromSeconds(5));
         }
         await Log.CloseAndFlushAsync();
+
+        // Release the single-instance handles so a relaunch (incl. Velopack's
+        // apply-and-restart) can immediately re-acquire the mutex.
+        try { _showMainWindowEvent?.Dispose(); } catch { }
+        try
+        {
+            _singleInstanceMutex?.ReleaseMutex();
+            _singleInstanceMutex?.Dispose();
+        }
+        catch { /* never block exit */ }
+
         base.OnExit(e);
     }
 

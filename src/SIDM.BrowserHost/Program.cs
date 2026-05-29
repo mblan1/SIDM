@@ -118,12 +118,18 @@ internal static class Program
             {
                 if (File.Exists(candidate))
                 {
-                    Process.Start(new ProcessStartInfo
+                    // --background tells SIDM.App this is a download-capture
+                    // cold launch: suppress the main window, show a tray cue,
+                    // and just open the download dialog. Without it, every
+                    // browser download would pop the full main window.
+                    var psi = new ProcessStartInfo
                     {
                         FileName = candidate,
                         UseShellExecute = true,
-                        WindowStyle = ProcessWindowStyle.Normal,
-                    });
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                    };
+                    psi.ArgumentList.Add("--background");
+                    Process.Start(psi);
                     return;
                 }
             }

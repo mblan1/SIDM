@@ -114,6 +114,29 @@ public partial class AddDownloadViewModel : ObservableObject
     }
 
     /// <summary>
+    /// True when a candidate file name shouldn't be trusted as-is and is
+    /// worth a HEAD probe to recover the real name from Content-Disposition.
+    /// Two cases:
+    ///   - no file extension (CDN URLs whose last segment is an opaque id), or
+    ///   - the name (sans extension) is a bare GUID, e.g. GitHub release
+    ///     assets redirect to <c>…/&lt;guid&gt;</c>.
+    /// </summary>
+    public static bool LooksUnreliableFileName(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return true;
+
+        var ext = Path.GetExtension(fileName);
+        if (string.IsNullOrEmpty(ext)) return true;
+
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        return GuidLike.IsMatch(stem);
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex GuidLike =
+        new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
     /// Returns the lowercased extension WITHOUT the leading dot. ".tar.gz" is
     /// not handled specially — we use the last component only, which is fine
     /// for the per-type folder memory feature.

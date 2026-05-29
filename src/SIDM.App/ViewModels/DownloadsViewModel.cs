@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SIDM.App.Services;
 using SIDM.App.Views;
+using SIDM.Core.Abstractions;
 using SIDM.Core.Models;
 using SIDM.Core.Persistence;
 using SIDM.Ipc;
@@ -240,11 +241,33 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
         if (seed is not null)
         {
             dialog.ViewModel.Url = seed.Url;
-            dialog.ViewModel.FileName = !string.IsNullOrWhiteSpace(seed.FileName)
+
+            // Pick the best filename we can. Priority:
+            //   1) what the extension captured (seed.FileName), if reliable,
+            //   2) the URL's last path segment, if reliable,
+            //   3) a HEAD probe of Content-Disposition (recovers the real
+            //      name for CDN-redirect URLs like GitHub release assets,
+            //      whose path ends in a GUID — the reported bug).
+            var candidate = !string.IsNullOrWhiteSpace(seed.FileName)
                 ? seed.FileName!
                 : AddDownloadViewModel.GuessFileNameFromUrl(seed.Url);
+            var recovered = false;
+            if (AddDownloadViewModel.LooksUnreliableFileName(candidate))
+            {
+                var better = await TryRecoverFileNameAsync(seed);
+                if (!string.IsNullOrWhiteSpace(better))
+                {
+                    candidate = better!;
+                    recovered = true;
+                }
+            }
+            dialog.ViewModel.FileName = candidate;
             dialog.ViewModel.ExpectedLength = seed.ExpectedLength;
-            dialog.ViewModel.Mime = seed.Mime;
+            // Drop the extension-supplied MIME when we had to recover the
+            // name — Chrome guesses "image/*" for an extension-less GUID,
+            // which would otherwise show as a bogus "Type". The dialog
+            // derives the type from the (now correct) file extension.
+            dialog.ViewModel.Mime = recovered ? null : seed.Mime;
 
             // Surface the yt-dlp format the user picked in the browser
             // overlay, if any. The picker passes both the format selector
@@ -733,6 +756,34 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             await RefreshRowAsync(row);
         }
         await RefreshRowAsync(row);
+    }
+
+    /// <summary>
+    /// HEAD-probes the URL to recover the real filename from Content-Disposition
+    /// when the captured/URL-derived name is unreliable (GUID / no extension).
+    /// Bounded to 4 s so a slow server can't hang the dialog open. Returns null
+    /// on timeout/failure so the caller keeps its existing guess.
+    /// </summary>
+    private async Task<string?> TryRecoverFileNameAsync(DownloadRequestMessage seed)
+    {
+        if (!Uri.TryCreate(seed.Url, UriKind.Absolute, out var uri)) return null;
+
+        var headers = seed.Referer is { Length: > 0 } referer
+            ? new Dictionary<string, string> { ["Referer"] = referer }
+            : null;
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var probe = scope.ServiceProvider.GetRequiredService<IRangeProbe>();
+            return await probe.ProbeFileNameAsync(uri, headers, seed.Cookies, cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Filename recovery probe failed for {Url}", seed.Url);
+            return null;
+        }
     }
 
     private async Task<string?> TryGetRememberedFolderAsync(string extension)

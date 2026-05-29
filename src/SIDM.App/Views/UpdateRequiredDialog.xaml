@@ -1,0 +1,61 @@
+<ui:FluentWindow x:Class="SIDM.App.Views.UpdateRequiredDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 mc:Ignorable="d"
+                 Title="Update required"
+                 Height="280"
+                 Width="540"
+                 ResizeMode="NoResize"
+                 ExtendsContentIntoTitleBar="True"
+                 Icon="pack://application:,,,/Resources/sidm.png"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 WindowStartupLocation="CenterOwner"
+                 ShowInTaskbar="True">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Update required" />
+
+        <Grid Grid.Row="1" Margin="24,8,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="#15FFFFFF" CornerRadius="8" Padding="14">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ui:SymbolIcon Grid.Column="0" Symbol="ArrowSync24" FontSize="36"
+                                   Foreground="#4DA3FF" VerticalAlignment="Top" Margin="0,2,14,0" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock x:Name="HeadlineText"
+                                   Text="A new version of SIDM is available"
+                                   FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DetailText"
+                                   Margin="0,8,0,0" Opacity="0.8" FontSize="12" TextWrapping="Wrap"
+                                   Text="You need to update to keep using SIDM. This takes a few seconds and SIDM will restart automatically." />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <ui:Button Content="Exit SIDM" Margin="0,0,8,0"
+                           Icon="{ui:SymbolIcon Symbol=Dismiss24}"
+                           Click="OnExit" />
+                <ui:Button Content="Update now" Appearance="Primary"
+                           Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
+                           Click="OnUpdate" IsDefault="True" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

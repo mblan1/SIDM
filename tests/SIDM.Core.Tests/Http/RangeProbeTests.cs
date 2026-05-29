@@ -150,6 +150,51 @@ public class RangeProbeTests
         result.ContentHash.Should().Be("deadbeef00112233445566778899aabb");
     }
 
+    [Fact]
+    public async Task ProbeFileName_returns_ContentDisposition_name()
+    {
+        // GitHub release asset shape: URL ends in a GUID, real name in
+        // Content-Disposition.
+        var handler = new FakeHttpMessageHandler(req => req.Method == HttpMethod.Head
+            ? HeadResponse(contentLength: 7_000_000, acceptRanges: true,
+                contentDisposition: "attachment; filename=go2rtc_win64.zip")
+            : new HttpResponseMessage(HttpStatusCode.MethodNotAllowed));
+
+        var probe = new RangeProbe(FakeHttpMessageHandler.ToFactory(RangeProbe.HttpClientName, handler), NullLogger<RangeProbe>.Instance);
+
+        var name = await probe.ProbeFileNameAsync(
+            new Uri("https://release-assets.githubusercontent.com/x/4ed81825-4b19-4a4f-b113-be56aed03a82"),
+            requestHeaders: null, cookies: null, CancellationToken.None);
+
+        name.Should().Be("go2rtc_win64.zip");
+        handler.Requests.Should().ContainSingle().Which.Method.Should().Be(HttpMethod.Head, "filename probe is HEAD-only");
+    }
+
+    [Fact]
+    public async Task ProbeFileName_returns_null_when_no_ContentDisposition()
+    {
+        // No Content-Disposition → null (caller keeps its own URL guess).
+        var handler = new FakeHttpMessageHandler(_ => HeadResponse(contentLength: 1, acceptRanges: false));
+
+        var probe = new RangeProbe(FakeHttpMessageHandler.ToFactory(RangeProbe.HttpClientName, handler), NullLogger<RangeProbe>.Instance);
+
+        var name = await probe.ProbeFileNameAsync(TestUrl, null, null, CancellationToken.None);
+
+        name.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ProbeFileName_returns_null_on_network_failure()
+    {
+        var handler = new FakeHttpMessageHandler(_ => throw new HttpRequestException("boom"));
+
+        var probe = new RangeProbe(FakeHttpMessageHandler.ToFactory(RangeProbe.HttpClientName, handler), NullLogger<RangeProbe>.Instance);
+
+        var name = await probe.ProbeFileNameAsync(TestUrl, null, null, CancellationToken.None);
+
+        name.Should().BeNull("a failed probe must not throw — caller falls back to the URL guess");
+    }
+
     private static HttpResponseMessage HeadResponse(
         long contentLength,
         bool acceptRanges,
