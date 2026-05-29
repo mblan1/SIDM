@@ -8,6 +8,11 @@ internal static class Program
 {
     private const string BootstrapExeName = "SIDMSetup-Bootstrap.exe";
 
+    /// <summary>Root temp folder for embedded-bootstrap extractions. Cleaned
+    /// up after the installer exits, and swept on each launch so a crashed
+    /// run doesn't leave 100+ MB behind.</summary>
+    private static string ExtractRoot => Path.Combine(Path.GetTempPath(), "SIDM-Setup");
+
     /// <summary>
     /// Velopack writes this when it installs. <c>packId</c> in publish.ps1 is
     /// <c>SIDM</c>, so the key name is <c>SIDM</c>. Per-user installs land in
@@ -26,7 +31,11 @@ internal static class Program
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "SIDM");
 
-        var bootstrap = ResolveBootstrap();
+        // Sweep any leftover extractions from earlier runs (e.g. an aborted
+        // install) before we add a new one.
+        SweepOldExtractions();
+
+        var bootstrap = ResolveBootstrap(out var extractedDir);
         if (bootstrap is null)
         {
             MessageBox.Show(
@@ -38,37 +47,61 @@ internal static class Program
             return 2;
         }
 
-        using var form = new LauncherForm(defaultPath, isUpdate: existingInstall is not null);
-        var result = form.ShowDialog();
-        if (result != DialogResult.OK || string.IsNullOrWhiteSpace(form.ChosenPath))
-        {
-            return 1;
-        }
-
         try
         {
-            var psi = new ProcessStartInfo
+            using var form = new LauncherForm(defaultPath, isUpdate: existingInstall is not null);
+            var result = form.ShowDialog();
+            if (result != DialogResult.OK || string.IsNullOrWhiteSpace(form.ChosenPath))
             {
-                FileName = bootstrap,
-                UseShellExecute = false,
-            };
-            psi.ArgumentList.Add("--installto");
-            psi.ArgumentList.Add(form.ChosenPath);
+                return 1;
+            }
 
-            using var proc = Process.Start(psi);
-            if (proc is null) return 3;
-            proc.WaitForExit();
-            return proc.ExitCode;
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = bootstrap,
+                    UseShellExecute = false,
+                };
+                psi.ArgumentList.Add("--installto");
+                psi.ArgumentList.Add(form.ChosenPath);
+
+                using var proc = Process.Start(psi);
+                if (proc is null) return 3;
+                proc.WaitForExit();
+                return proc.ExitCode;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Failed to start the installer:\n{ex.Message}",
+                    "SIDM Setup",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                return 4;
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            MessageBox.Show(
-                $"Failed to start the installer:\n{ex.Message}",
-                "SIDM Setup",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-            return 4;
+            // Delete the extracted bootstrap (~110 MB) now that the installer
+            // has finished — don't leave it in %TEMP%.
+            if (extractedDir is not null)
+            {
+                try { Directory.Delete(extractedDir, recursive: true); } catch { /* best-effort */ }
+            }
         }
+    }
+
+    private static void SweepOldExtractions()
+    {
+        try
+        {
+            if (Directory.Exists(ExtractRoot))
+            {
+                Directory.Delete(ExtractRoot, recursive: true);
+            }
+        }
+        catch { /* best-effort — a concurrent installer may hold a file */ }
     }
 
     /// <summary>
@@ -79,11 +112,14 @@ internal static class Program
     ///      to a temp file,
     ///   2) a copy sitting next to the launcher (the releases/ folder layout,
     ///      and dev builds).
-    /// Returns null only when neither exists.
+    /// Returns null only when neither exists. <paramref name="extractedDir"/>
+    /// is set to the temp folder to delete after use when (and only when) the
+    /// bootstrap was extracted from the embedded resource; null for the
+    /// side-by-side case (nothing to clean up).
     /// </summary>
-    private static string? ResolveBootstrap()
+    private static string? ResolveBootstrap(out string? extractedDir)
     {
-        var embedded = TryExtractEmbeddedBootstrap();
+        var embedded = TryExtractEmbeddedBootstrap(out extractedDir);
         if (embedded is not null) return embedded;
 
         var sideBySide = Path.Combine(AppContext.BaseDirectory, BootstrapExeName);
@@ -94,17 +130,20 @@ internal static class Program
     /// Extracts the embedded bootstrap (logical name <c>SIDMSetup-Bootstrap.exe</c>)
     /// to a per-run temp folder and returns its path, or null when no resource
     /// is embedded (dev/IDE builds). Best-effort: any failure returns null so
-    /// the caller falls back to the side-by-side copy.
+    /// the caller falls back to the side-by-side copy. On success
+    /// <paramref name="extractedDir"/> holds the temp folder for the caller to
+    /// delete once the installer has finished.
     /// </summary>
-    private static string? TryExtractEmbeddedBootstrap()
+    private static string? TryExtractEmbeddedBootstrap(out string? extractedDir)
     {
+        extractedDir = null;
         try
         {
             var asm = System.Reflection.Assembly.GetExecutingAssembly();
             using var stream = asm.GetManifestResourceStream(BootstrapExeName);
             if (stream is null) return null;
 
-            var dir = Path.Combine(Path.GetTempPath(), "SIDM-Setup", Guid.NewGuid().ToString("N"));
+            var dir = Path.Combine(ExtractRoot, Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dir);
             var dest = Path.Combine(dir, BootstrapExeName);
 
@@ -112,6 +151,7 @@ internal static class Program
             {
                 stream.CopyTo(file);
             }
+            extractedDir = dir;
             return dest;
         }
         catch
