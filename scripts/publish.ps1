@@ -144,6 +144,19 @@ if (-not $vpk) {
 
 if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir | Out-Null }
 
+# Remove the front-door installer exes from prior runs BEFORE packing. We keep
+# the .nupkg/RELEASES feed (vpk needs the previous full package to build the
+# delta), but a stale SIDMSetup.exe / SIDMSetup-Bootstrap.exe would otherwise
+# get picked up in step 5 and embedded recursively (launcher-inside-launcher),
+# bloating the output and shipping a version-behind bootstrap.
+foreach ($stale in 'SIDMSetup.exe', 'SIDMSetup-Bootstrap.exe', 'SIDM-win-Setup.exe') {
+    $stalePath = Join-Path $OutputDir $stale
+    if (Test-Path $stalePath) {
+        Remove-Item -Force $stalePath
+        Write-Host "   cleaned stale $stale from output dir" -ForegroundColor DarkGray
+    }
+}
+
 Write-Host "==> vpk pack" -ForegroundColor Cyan
 $packArgs = @(
     'pack',
@@ -190,8 +203,8 @@ if ($LASTEXITCODE -ne 0) {
 #    silent installs and as the target the launcher actually spawns.
 $bootstrapExe = Join-Path $OutputDir 'SIDMSetup-Bootstrap.exe'
 $velopackExeCandidates = @(
-    (Join-Path $OutputDir 'SIDMSetup.exe'),
-    (Join-Path $OutputDir 'SIDM-win-Setup.exe')
+    (Join-Path $OutputDir 'SIDM-win-Setup.exe'),
+    (Join-Path $OutputDir 'SIDMSetup.exe')
 )
 $velopackExe = $velopackExeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($velopackExe) {

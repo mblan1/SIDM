@@ -59,6 +59,7 @@ function renderRow(f: FormatOption, onPick: (f: FormatOption) => void): HTMLLIEl
     li.className = 'format-row';
 
     const left = document.createElement('div');
+    left.className = 'format-left';
     const label = document.createElement('div');
     label.className = 'format-label';
     label.textContent = f.label;

@@ -17,15 +17,23 @@ html, body {
     margin: 0;
     padding: 0;
     height: 100%;
+    width: 100%;
+    max-width: 100%;
     background: var(--bg);
     color: var(--fg);
     font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow-x: hidden;
 }
 
 body {
     display: grid;
     grid-template-rows: auto 1fr auto;
 }
+
+/* Grid items default to min-width:auto, which refuses to shrink below their
+   content — a long URL or codec string would widen the whole window. Forcing
+   min-width:0 lets the text ellipsis actually engage. */
+header, main, footer { min-width: 0; }
 
 header {
     padding: 12px 16px 8px;
@@ -106,9 +114,12 @@ main {
 }
 .format-row:hover { background: var(--row-hover); border-color: var(--accent); }
 
-.format-label { font-weight: 600; font-size: 13px; }
-.format-meta { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: ui-monospace, Consolas, monospace; }
-.format-size { font-size: 12px; color: var(--muted); white-space: nowrap; }
+/* Left (label + meta) column must shrink so its 1fr track doesn't grow to fit
+   long codec strings and push the row past the window width. */
+.format-left { min-width: 0; }
+.format-label { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.format-meta { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: ui-monospace, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.format-size { font-size: 12px; color: var(--muted); white-space: nowrap; padding-left: 10px; }
 
 .empty { font-size: 11px; color: var(--muted); padding: 6px 12px; margin: 0; font-style: italic; }
 
