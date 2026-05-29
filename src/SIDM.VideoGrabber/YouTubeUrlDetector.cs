@@ -26,7 +26,13 @@ public static class YouTubeUrlDetector
         ("dailymotion.com", null),
         ("tiktok.com", null),
         ("facebook.com", "/watch"),
+        ("facebook.com", "/reel"),
+        ("facebook.com", "/share/v"),
+        ("facebook.com", "/share/r"),
+        ("fb.watch", null),
         ("instagram.com", "/reel"),
+        ("instagram.com", "/p/"),
+        ("instagram.com", "/tv/"),
     ];
 
     public static bool IsVideoUrl(string url)

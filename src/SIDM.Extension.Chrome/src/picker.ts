@@ -76,7 +76,10 @@ function renderRow(f: FormatOption, onPick: (f: FormatOption) => void): HTMLLIEl
     return li;
 }
 
+let videoTitle: string | undefined;
+
 function render(resp: ListFormatsResponse) {
+    videoTitle = resp.title ?? undefined;
     $pageTitle.textContent = resp.title ?? videoUrl;
 
     $videoList.innerHTML = '';
@@ -100,9 +103,20 @@ function pick(f: FormatOption) {
     const sizeLabel = f.fileSize ? ` · ${fmtBytes(f.fileSize)}` : '';
     const prettyLabel = `${f.label} · ${f.ext.toUpperCase()}${sizeLabel}`;
 
+    // Use the video title as the file name so the dialog shows something
+    // meaningful (not "download.bin"). Sanitize characters Windows forbids
+    // in filenames; fall back to a generic name if there's no title.
+    const safeTitle = (videoTitle ?? '')
+        .replace(/[\\/:*?"<>|]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 120);
+    const fileName = safeTitle ? `${safeTitle}.${f.ext}` : undefined;
+
     const request: DownloadRequest = {
         type: 'download',
         url: videoUrl,
+        fileName,
         ytDlpFormat: f.formatId,
         ytDlpFormatLabel: prettyLabel,
         userAgent: navigator.userAgent,

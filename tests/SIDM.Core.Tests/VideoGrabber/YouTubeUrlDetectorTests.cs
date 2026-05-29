@@ -15,7 +15,10 @@ public class YouTubeUrlDetectorTests
     [InlineData("https://dailymotion.com/video/x9abc")]
     [InlineData("https://www.tiktok.com/@user/video/1234")]
     [InlineData("https://www.facebook.com/watch?v=123")]
+    [InlineData("https://www.facebook.com/reel/847834591704755")]
+    [InlineData("https://fb.watch/abcdef/")]
     [InlineData("https://www.instagram.com/reel/abc")]
+    [InlineData("https://www.instagram.com/p/abc123/")]
     public void Recognizes_known_video_hosts(string url)
     {
         YouTubeUrlDetector.IsVideoUrl(url).Should().BeTrue();

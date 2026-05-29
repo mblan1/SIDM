@@ -22,12 +22,17 @@ public interface IYtDlpRunner
 /// <param name="YtDlpPath">Resolved yt-dlp executable. Required.</param>
 /// <param name="FfmpegPath">Resolved ffmpeg executable. Optional — yt-dlp falls back to single-stream formats if absent.</param>
 /// <param name="FormatSelector">yt-dlp <c>-f</c> argument. Defaults to "bestvideo*+bestaudio/best".</param>
+/// <param name="OutputFileNameStem">Base file name (without extension) to save
+/// as, e.g. the title the user saw/edited in the Add-download dialog. When set,
+/// yt-dlp writes <c>&lt;stem&gt;.&lt;ext&gt;</c> so the saved file matches the
+/// dialog. Null → yt-dlp's default <c>%(title)s.%(ext)s</c>.</param>
 public sealed record YtDlpRunRequest(
     string Url,
     string OutputDirectory,
     string YtDlpPath,
     string? FfmpegPath = null,
-    string? FormatSelector = null);
+    string? FormatSelector = null,
+    string? OutputFileNameStem = null);
 
 /// <summary>Terminal outcome.</summary>
 /// <param name="Success">True when yt-dlp exited 0 and we recorded a final file path.</param>

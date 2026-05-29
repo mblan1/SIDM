@@ -211,8 +211,15 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
         // see the same single video.
         args.Add("--no-playlist");
 
+        // Output template. When the caller passed a filename stem (the title
+        // shown/edited in the dialog), use it so the saved file matches what
+        // the user saw — yt-dlp still appends the real container via %(ext)s.
+        // Otherwise fall back to yt-dlp's own %(title)s.
         args.Add("-o");
-        args.Add(Path.Combine(request.OutputDirectory, "%(title)s.%(ext)s"));
+        var outName = string.IsNullOrWhiteSpace(request.OutputFileNameStem)
+            ? "%(title)s.%(ext)s"
+            : SanitizeStem(request.OutputFileNameStem!) + ".%(ext)s";
+        args.Add(Path.Combine(request.OutputDirectory, outName));
 
         args.Add("-f");
         args.Add(request.FormatSelector ?? "bestvideo*+bestaudio/best");
@@ -233,5 +240,23 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
 
         args.Add("--");
         args.Add(request.Url);
+    }
+
+    /// <summary>
+    /// Makes a caller-supplied filename safe for a yt-dlp <c>-o</c> template:
+    /// strips path separators, characters Windows forbids, and (critically)
+    /// <c>%</c> so the stem can't be parsed as a yt-dlp output field. Trims to
+    /// a sane length. Falls back to "video" if nothing usable remains.
+    /// </summary>
+    private static string SanitizeStem(string stem)
+    {
+        // Drop any extension the caller left on (we append %(ext)s ourselves).
+        stem = Path.GetFileNameWithoutExtension(stem);
+        var cleaned = new string(stem
+            .Where(c => c != '%' && !Path.GetInvalidFileNameChars().Contains(c))
+            .ToArray())
+            .Trim();
+        if (cleaned.Length > 120) cleaned = cleaned[..120].Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "video" : cleaned;
     }
 }

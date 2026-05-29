@@ -352,6 +352,17 @@ public sealed class DownloadEngine
             }
         });
 
+        // Use the dialog's file name (the picker fills it from the video
+        // title) as the yt-dlp output name so the saved file matches what the
+        // user saw/edited. Skip the generic placeholder so yt-dlp's own
+        // %(title)s is used instead of literally saving "download".
+        var fileNameStem = Path.GetFileNameWithoutExtension(download.FileName);
+        if (string.Equals(fileNameStem, "download", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(fileNameStem))
+        {
+            fileNameStem = null;
+        }
+
         var request = new YtDlpRunRequest(
             Url: download.Url,
             OutputDirectory: outputDir!,
@@ -359,7 +370,8 @@ public sealed class DownloadEngine
             FfmpegPath: _videoGrabberSettings.ResolveFfmpeg(),
             // User-picked format selector from the browser-overlay format
             // picker (null = let yt-dlp pick its default).
-            FormatSelector: download.SelectedYtDlpFormat);
+            FormatSelector: download.SelectedYtDlpFormat,
+            OutputFileNameStem: fileNameStem);
 
         YtDlpRunResult result;
         try

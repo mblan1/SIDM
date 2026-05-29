@@ -39,12 +39,14 @@ public partial class AddDownloadViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasYtDlpFormat))]
+    [NotifyPropertyChangedFor(nameof(ShowSegments))]
     private string? _ytDlpFormat;
 
     /// <summary>Human-readable label the dialog renders next to "Format:"
     /// (e.g. "1080p MP4 · ~145 MB"). Set together with <see cref="YtDlpFormat"/>.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasYtDlpFormat))]
+    [NotifyPropertyChangedFor(nameof(ShowSegments))]
     private string? _ytDlpFormatLabel;
 
     /// <summary>Drives the visibility of the format row.</summary>
@@ -59,6 +61,14 @@ public partial class AddDownloadViewModel : ObservableObject
     public bool IsHlsUrl => HlsUrlDetector.IsHlsUrl(Url);
     public bool IsDashUrl => DashUrlDetector.IsDashUrl(Url);
     public bool IsSpecialUrl => IsVideoUrl || IsHlsUrl || IsDashUrl;
+
+    /// <summary>
+    /// The multi-segment slider only applies to plain HTTP downloads. Hide it
+    /// for streaming/yt-dlp routes — and also when a format was chosen in the
+    /// browser picker, since that always goes through yt-dlp even if the URL
+    /// itself wasn't recognized as a video host.
+    /// </summary>
+    public bool ShowSegments => !IsSpecialUrl && !HasYtDlpFormat;
 
     public string TargetPath => Path.Combine(TargetFolder, string.IsNullOrWhiteSpace(FileName)
         ? GuessFileNameFromUrl(Url)
@@ -82,6 +92,7 @@ public partial class AddDownloadViewModel : ObservableObject
         OnPropertyChanged(nameof(IsHlsUrl));
         OnPropertyChanged(nameof(IsDashUrl));
         OnPropertyChanged(nameof(IsSpecialUrl));
+        OnPropertyChanged(nameof(ShowSegments));
     }
 
     partial void OnFileNameChanged(string value)
