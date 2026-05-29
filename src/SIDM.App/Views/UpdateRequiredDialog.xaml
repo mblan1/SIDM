@@ -5,9 +5,9 @@
                  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  mc:Ignorable="d"
-                 Title="Update required"
-                 Height="280"
-                 Width="540"
+                 Title="Update SIDM"
+                 Height="300"
+                 Width="560"
                  ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
                  Icon="pack://application:,,,/Resources/sidm.png"
@@ -43,7 +43,7 @@
                                    FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" />
                         <TextBlock x:Name="DetailText"
                                    Margin="0,8,0,0" Opacity="0.8" FontSize="12" TextWrapping="Wrap"
-                                   Text="You need to update to keep using SIDM. This takes a few seconds and SIDM will restart automatically." />
+                                   Text="SIDM will download the update and restart automatically. You can keep using this version until then." />
 
                         <!-- Download progress — hidden until the user clicks Update now. -->
                         <StackPanel x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,12,0,0">
@@ -56,9 +56,8 @@
             </Border>
 
             <StackPanel x:Name="ButtonRow" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-                <ui:Button x:Name="ExitButton" Content="Exit SIDM" Margin="0,0,8,0"
-                           Icon="{ui:SymbolIcon Symbol=Dismiss24}"
-                           Click="OnExit" />
+                <ui:Button x:Name="LaterButton" Content="Later" Margin="0,0,8,0"
+                           Click="OnLater" IsCancel="True" />
                 <ui:Button x:Name="UpdateButton" Content="Update now" Appearance="Primary"
                            Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
                            Click="OnUpdate" IsDefault="True" />

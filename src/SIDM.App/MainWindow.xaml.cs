@@ -20,7 +20,6 @@ public partial class MainWindow : FluentWindow
     private readonly CloseBehaviorService _closeBehavior;
     private readonly IServiceProvider _services;
     private readonly UpdaterService? _updater;
-    private bool _forcedUpdatePrompted;
 
     public MainWindow(MainViewModel viewModel, OnboardingService onboarding, CloseBehaviorService closeBehavior, IServiceProvider services)
     {
@@ -41,63 +40,19 @@ public partial class MainWindow : FluentWindow
             await MaybeShowWelcomeAsync();
         };
         Closing += OnWindowClosing;
-
-        // Forced-update gate. Tied to the main window becoming VISIBLE so it
-        // only fires on a manual/foreground open — a background download
-        // cold-launch (window never shown) is never interrupted, per the
-        // product decision. IsVisibleChanged covers re-opening from the tray
-        // too; the UpdateAvailable event covers the check completing while
-        // the window is already up.
-        IsVisibleChanged += OnVisibilityChangedForUpdateGate;
-        if (_updater is not null)
-        {
-            _updater.UpdateAvailable += OnUpdaterReportedAvailable;
-            Closing += (_, _) => _updater.UpdateAvailable -= OnUpdaterReportedAvailable;
-        }
-    }
-
-    private void OnVisibilityChangedForUpdateGate(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
-    {
-        if (IsVisible) MaybeForceUpdate();
-    }
-
-    private void OnUpdaterReportedAvailable(UpdateCheckResult result)
-    {
-        Dispatcher.BeginInvoke(() => { if (IsVisible) MaybeForceUpdate(); });
     }
 
     /// <summary>
-    /// If the updater has confirmed a newer version, block the app behind a
-    /// modal "update or exit" dialog. Only a definitive
-    /// <see cref="UpdateCheckState.UpdateAvailable"/> triggers it — feed
-    /// errors / offline / up-to-date never lock the user out.
+    /// Opens the optional update window (download with progress → apply +
+    /// restart). Wired to the "Update" button in the update banner. Updates
+    /// are not forced — the user can choose Later.
     /// </summary>
-    private void MaybeForceUpdate()
+    private void OnOpenUpdateDialog(object sender, RoutedEventArgs e)
     {
-        if (_forcedUpdatePrompted || _updater is null) return;
-        if (_updater.LastResult is not { State: UpdateCheckState.UpdateAvailable } pending) return;
-
-        _forcedUpdatePrompted = true;
-
-        // The dialog owns the download-with-progress + apply-and-restart flow.
-        // On a successful apply it never returns (Velopack kills the process).
-        // It closes with Choice == Exit when the user declines, or stays/returns
-        // after a failed download so the user can retry or exit.
-        var dlg = new UpdateRequiredDialog(pending.AvailableVersion, _updater) { Owner = this };
+        if (_updater is null) return;
+        var version = _viewModel.UpdateAvailableVersion ?? _updater.LastResult?.AvailableVersion;
+        var dlg = new UpdateRequiredDialog(version, _updater) { Owner = this };
         dlg.ShowDialog();
-
-        if (dlg.Choice == UpdateRequiredDialog.UpdateChoice.Exit)
-        {
-            // User declined — outdated builds aren't allowed to run.
-            _closeBehavior.RequestExit();
-            System.Windows.Application.Current.Shutdown();
-        }
-        else
-        {
-            // Update was chosen but we're still here → apply failed. Let them
-            // retry on the next open instead of trapping them now.
-            _forcedUpdatePrompted = false;
-        }
     }
 
     /// <summary>

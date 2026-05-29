@@ -1,5 +1,5 @@
 using System;
-using System.ComponentModel;
+using System.Globalization;
 using System.Windows;
 using SIDM.App.Services;
 using Wpf.Ui.Controls;
@@ -7,20 +7,16 @@ using Wpf.Ui.Controls;
 namespace SIDM.App.Views;
 
 /// <summary>
-/// Modal "you must update to keep using SIDM" gate. Shown when the update
-/// check finds a newer version. Clicking "Update now" downloads the package
-/// (with a live progress bar) then applies it and restarts — Velopack kills
-/// this process. "Exit" (or the X) closes the app: outdated builds aren't
-/// allowed to keep running.
+/// Optional "update available" window. "Update now" downloads the package with
+/// a live progress bar (percent + speed + size), then applies it and restarts
+/// (Velopack terminates this process). "Later" just closes — the user keeps
+/// running the current version. Closing mid-download cancels it; Velopack
+/// keeps the partial so a later attempt resumes.
 /// </summary>
 public partial class UpdateRequiredDialog : FluentWindow
 {
-    public enum UpdateChoice { Exit, Update }
-
     private readonly UpdaterService _updater;
     private readonly System.Threading.CancellationTokenSource _cts = new();
-
-    public UpdateChoice Choice { get; private set; } = UpdateChoice.Exit;
 
     public UpdateRequiredDialog(string? availableVersion, UpdaterService updater)
     {
@@ -34,38 +30,36 @@ public partial class UpdateRequiredDialog : FluentWindow
 
     private async void OnUpdate(object sender, RoutedEventArgs e)
     {
-        Choice = UpdateChoice.Update;
-
-        // Switch to the downloading state — disable the buttons and show the
-        // progress bar. The bar jumps to 100% fast when the background check
-        // already pre-downloaded the package, or tracks a real download.
         UpdateButton.IsEnabled = false;
-        ExitButton.IsEnabled = false;
+        LaterButton.IsEnabled = false;
         ProgressPanel.Visibility = Visibility.Visible;
-        ProgressText.Text = "Downloading update…";
+        ProgressText.Text = "Starting download…";
 
-        var progress = new Progress<int>(p =>
+        var progress = new Progress<UpdateDownloadProgress>(p =>
         {
-            DownloadProgress.IsIndeterminate = p <= 0;
-            DownloadProgress.Value = p;
-            ProgressText.Text = p > 0 ? $"Downloading update… {p}%" : "Downloading update…";
+            DownloadProgress.IsIndeterminate = p.Percent <= 0;
+            DownloadProgress.Value = p.Percent;
+            ProgressText.Text = FormatProgress(p);
         });
 
         var downloaded = await _updater.DownloadPendingAsync(progress, _cts.Token);
+
         if (!downloaded)
         {
-            ProgressText.Text = "Download failed. Check your connection and try again.";
-            DownloadProgress.IsIndeterminate = false;
-            DownloadProgress.Value = 0;
-            UpdateButton.IsEnabled = true;
-            ExitButton.IsEnabled = true;
+            // Either failed or canceled (window closing). If the window is
+            // still open, let the user retry.
+            if (IsLoaded && IsVisible)
+            {
+                ProgressText.Text = "Download didn't finish. Click Update now to resume.";
+                DownloadProgress.IsIndeterminate = false;
+                UpdateButton.IsEnabled = true;
+                LaterButton.IsEnabled = true;
+            }
             return;
         }
 
-        // Walk the install stages. The download above is the only phase we get
-        // live progress for; the unpack/install/cleanup happen in Velopack's
-        // Update.exe after this process exits, so we surface them as a short
-        // labelled sequence with an indeterminate bar before handing off.
+        // Post-download install phases (Velopack unpacks/installs/cleans on
+        // apply, out-of-process, then restarts).
         DownloadProgress.IsIndeterminate = true;
         await ShowStageAsync("Verifying download…");
         await ShowStageAsync("Unpacking…");
@@ -73,45 +67,46 @@ public partial class UpdateRequiredDialog : FluentWindow
         await ShowStageAsync("Cleaning up old files…");
         ProgressText.Text = "Restarting SIDM…";
 
-        // Applies the pending update and restarts — this call does not return
-        // on success (Velopack terminates the process). If it returns false,
-        // applying failed; let the user retry or exit rather than trapping them.
         if (!_updater.ApplyPendingAndRestart())
         {
-            ProgressText.Text = "Could not apply the update. Try again or exit.";
+            ProgressText.Text = "Could not apply the update. Try again or close.";
             DownloadProgress.IsIndeterminate = false;
             UpdateButton.IsEnabled = true;
-            ExitButton.IsEnabled = true;
+            LaterButton.IsEnabled = true;
         }
     }
 
-    /// <summary>Shows one install-stage label briefly so the sequence is
-    /// readable. Honest about the work Velopack is about to do on apply.</summary>
-    private async Task ShowStageAsync(string label)
+    private void OnLater(object sender, RoutedEventArgs e) => Close();
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        // Cancel an in-flight download so the window can close promptly; the
+        // partial package stays on disk for a resume next time.
+        try { _cts.Cancel(); } catch { }
+        base.OnClosing(e);
+    }
+
+    private async System.Threading.Tasks.Task ShowStageAsync(string label)
     {
         ProgressText.Text = label;
-        try { await Task.Delay(650, _cts.Token); }
+        try { await System.Threading.Tasks.Task.Delay(650, _cts.Token); }
         catch (OperationCanceledException) { }
     }
 
-    private void OnExit(object sender, RoutedEventArgs e)
+    private static string FormatProgress(UpdateDownloadProgress p)
     {
-        Choice = UpdateChoice.Exit;
-        DialogResult = false;
-        Close();
+        var parts = new System.Collections.Generic.List<string> { $"Downloading update… {p.Percent}%" };
+        if (p.BytesPerSecond > 1) parts.Add(FormatBytes((long)p.BytesPerSecond) + "/s");
+        if (p.TotalBytes > 0) parts.Add($"{FormatBytes(p.ReceivedBytes)} / {FormatBytes(p.TotalBytes)}");
+        return string.Join("  ·  ", parts);
     }
 
-    /// <summary>
-    /// Closing via the title-bar X (or Alt+F4) counts as "Exit" — never as a
-    /// silent dismiss that would let the user run the outdated build.
-    /// </summary>
-    protected override void OnClosing(CancelEventArgs e)
+    private static string FormatBytes(long bytes)
     {
-        if (DialogResult is null)
-        {
-            Choice = UpdateChoice.Exit;
-        }
-        try { _cts.Cancel(); } catch { /* ignore */ }
-        base.OnClosing(e);
+        string[] units = ["B", "KiB", "MiB", "GiB"];
+        double v = bytes;
+        var u = 0;
+        while (v >= 1024 && u < units.Length - 1) { v /= 1024; u++; }
+        return string.Format(CultureInfo.CurrentCulture, "{0:F1} {1}", v, units[u]);
     }
 }

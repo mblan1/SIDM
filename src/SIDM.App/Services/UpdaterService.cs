@@ -22,6 +22,13 @@ public sealed record UpdateCheckResult(UpdateCheckState State, string Message, s
         new(UpdateCheckState.UpToDate, "SIDM is up to date.");
 }
 
+/// <summary>Live download progress for a pending update.</summary>
+/// <param name="Percent">0–100.</param>
+/// <param name="BytesPerSecond">Smoothed transfer rate; 0 until enough samples.</param>
+/// <param name="ReceivedBytes">Bytes downloaded so far (derived from percent × total).</param>
+/// <param name="TotalBytes">Total package size, or 0 when unknown.</param>
+public sealed record UpdateDownloadProgress(int Percent, double BytesPerSecond, long ReceivedBytes, long TotalBytes);
+
 public enum UpdateCheckState
 {
     /// <summary>No feed URL persisted; nothing to do.</summary>
@@ -206,22 +213,13 @@ public sealed class UpdaterService
                 return UpdateCheckResult.UpToDate;
             }
 
-            // Pre-download the package so applying is instant on user click.
-            try
-            {
-                await manager.DownloadUpdatesAsync(info).ConfigureAwait(false);
-                _pendingUpdate = info;
-                var version = info.TargetFullRelease.Version.ToString();
-                return new UpdateCheckResult(UpdateCheckState.UpdateAvailable,
-                    $"SIDM {version} is available — click to install.",
-                    AvailableVersion: version);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Update download failed");
-                return new UpdateCheckResult(UpdateCheckState.FeedError,
-                    $"Update found but download failed: {ex.Message}");
-            }
+            // Don't pre-download here — the user downloads on click so they
+            // see live progress + speed. Just record what's available.
+            _pendingUpdate = info;
+            var version = info.TargetFullRelease.Version.ToString();
+            return new UpdateCheckResult(UpdateCheckState.UpdateAvailable,
+                $"SIDM {version} is available.",
+                AvailableVersion: version);
         }
         finally
         {
@@ -237,18 +235,53 @@ public sealed class UpdaterService
     /// bar. Returns false when there's nothing to download or the app isn't an
     /// installed build.
     /// </summary>
-    public async Task<bool> DownloadPendingAsync(IProgress<int>? progress, CancellationToken cancellationToken = default)
+    public async Task<bool> DownloadPendingAsync(IProgress<UpdateDownloadProgress>? progress, CancellationToken cancellationToken = default)
     {
         if (_pendingUpdate is null || string.IsNullOrWhiteSpace(FeedUrl)) return false;
         try
         {
             var manager = new UpdateManager(BuildSource(FeedUrl!));
             if (!manager.IsInstalled) return false;
+
+            // Velopack's callback gives percent only. Derive bytes from the
+            // known package size and compute a smoothed speed over ~0.3s
+            // windows. Velopack resumes a partial download from the packages
+            // folder, so on a re-run percent simply starts wherever the last
+            // attempt left off.
+            long total = 0;
+            try { total = _pendingUpdate.TargetFullRelease?.Size ?? 0; } catch { total = 0; }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var lastElapsed = TimeSpan.Zero;
+            long lastBytes = 0;
+            double lastBps = 0;
+
+            void Report(int pct)
+            {
+                long received = total > 0 ? (long)(pct / 100.0 * total) : 0;
+                var now = sw.Elapsed;
+                var dt = (now - lastElapsed).TotalSeconds;
+                if (dt >= 0.3 && received >= lastBytes)
+                {
+                    lastBps = (received - lastBytes) / dt;
+                    lastBytes = received;
+                    lastElapsed = now;
+                }
+                progress?.Report(new UpdateDownloadProgress(pct, lastBps, received, total));
+            }
+
             await manager.DownloadUpdatesAsync(
                 _pendingUpdate,
-                progress is null ? null : p => progress.Report(p),
+                progress is null ? null : Report,
                 cancelToken: cancellationToken).ConfigureAwait(false);
             return true;
+        }
+        catch (OperationCanceledException)
+        {
+            // User closed the update window mid-download. Velopack keeps the
+            // partial package, so the next attempt resumes from it.
+            _logger.LogInformation("Update download canceled — partial kept for resume");
+            return false;
         }
         catch (Exception ex)
         {

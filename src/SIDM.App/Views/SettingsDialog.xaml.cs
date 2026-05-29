@@ -204,8 +204,13 @@ public partial class SettingsDialog : FluentWindow
         // the user sees real progress. ApplyPendingAndRestart does not return
         // on success — Velopack terminates the process.
         ViewModel.UpdateReadyToApply = false;
-        var progress = new Progress<int>(p =>
-            ViewModel.UpdateStatus = p > 0 ? $"Downloading update… {p}%" : "Downloading update…");
+        var progress = new Progress<UpdateDownloadProgress>(p =>
+        {
+            var line = $"Downloading update… {p.Percent}%";
+            if (p.BytesPerSecond > 1) line += $"  ·  {Mib(p.BytesPerSecond):F1} MiB/s";
+            if (p.TotalBytes > 0) line += $"  ·  {Mib(p.ReceivedBytes):F1} / {Mib(p.TotalBytes):F1} MiB";
+            ViewModel.UpdateStatus = line;
+        });
 
         var downloaded = await _updater.DownloadPendingAsync(progress);
         if (!downloaded)
@@ -371,6 +376,8 @@ public partial class SettingsDialog : FluentWindow
     {
         ViewModel.YtDlpStatus = BuildResolvedPathStatus();
     }
+
+    private static double Mib(double bytes) => bytes / (1024d * 1024d);
 
     /// <summary>
     /// Plain streamed download — same pattern as <see cref="BrowserExtensionInstaller"/>.

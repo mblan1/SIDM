@@ -28,36 +28,61 @@
 
         <ui:TitleBar Grid.Row="0" Title="{Binding Title}" />
 
-        <!-- Browser extension install banner — shown until at least one
-             browser extension has handshaked with SIDM. -->
-        <Border Grid.Row="1"
-                Background="{DynamicResource AccentFillColorDefaultBrush}"
-                Padding="16,10"
-                Visibility="{Binding ShowBrowserExtensionBanner, Converter={StaticResource BoolToVisibilityConverter}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <ui:SymbolIcon Grid.Column="0" Symbol="PuzzlePiece24"
+        <StackPanel Grid.Row="1">
+            <!-- Update-available banner — appears when a check finds a newer
+                 version. Click Update to open the progress window. -->
+            <Border Background="#1F6FEB"
+                    Padding="16,10"
+                    Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:SymbolIcon Grid.Column="0" Symbol="ArrowDownload24"
+                                   Foreground="White"
+                                   FontSize="18" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                               Foreground="White"
+                               Text="{Binding UpdateBannerText}" />
+                    <ui:Button Grid.Column="2"
+                               Content="Update"
+                               Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
+                               Click="OnOpenUpdateDialog" />
+                </Grid>
+            </Border>
+
+            <!-- Browser extension install banner — shown until at least one
+                 browser extension has handshaked with SIDM. -->
+            <Border Background="{DynamicResource AccentFillColorDefaultBrush}"
+                    Padding="16,10"
+                    Visibility="{Binding ShowBrowserExtensionBanner, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:SymbolIcon Grid.Column="0" Symbol="PuzzlePiece24"
+                                   Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
+                                   FontSize="18" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <TextBlock Grid.Column="1" VerticalAlignment="Center"
                                Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
-                               FontSize="18" VerticalAlignment="Center" Margin="0,0,12,0" />
-                <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                           Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
-                           Text="Install the SIDM browser extension to capture downloads automatically." />
-                <ui:Button Grid.Column="2"
-                           Content="Install"
-                           Click="OnOpenBrowserExtensionDialog"
-                           Margin="0,0,8,0" />
-                <ui:Button Grid.Column="3"
-                           Icon="{ui:SymbolIcon Symbol=Dismiss24}"
-                           Appearance="Transparent"
-                           ToolTip="Dismiss"
-                           Command="{Binding DismissBannerCommand}" />
-            </Grid>
-        </Border>
+                               Text="Install the SIDM browser extension to capture downloads automatically." />
+                    <ui:Button Grid.Column="2"
+                               Content="Install"
+                               Click="OnOpenBrowserExtensionDialog"
+                               Margin="0,0,8,0" />
+                    <ui:Button Grid.Column="3"
+                               Icon="{ui:SymbolIcon Symbol=Dismiss24}"
+                               Appearance="Transparent"
+                               ToolTip="Dismiss"
+                               Command="{Binding DismissBannerCommand}" />
+                </Grid>
+            </Border>
+        </StackPanel>
 
         <!-- Toolbar -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="16,8,16,8">
