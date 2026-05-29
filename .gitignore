@@ -89,3 +89,7 @@ tools/ffmpeg.exe
 src/SIDM.Extension.Chrome/dist/
 src/SIDM.Extension.Firefox/dist/
 extension-uploads/
+
+# Velopack bootstrap copied here transiently by publish.ps1 to embed it into
+# the SetupLauncher; removed after publish, never committed.
+src/SIDM.SetupLauncher/embedded/

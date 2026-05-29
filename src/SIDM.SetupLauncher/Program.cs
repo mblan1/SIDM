@@ -71,10 +71,53 @@ internal static class Program
         }
     }
 
+    /// <summary>
+    /// Locates the Velopack bootstrap installer that this launcher spawns.
+    /// Priority:
+    ///   1) embedded resource (release builds bundle the bootstrap inside
+    ///      SIDMSetup.exe so a standalone download just works) — extracted
+    ///      to a temp file,
+    ///   2) a copy sitting next to the launcher (the releases/ folder layout,
+    ///      and dev builds).
+    /// Returns null only when neither exists.
+    /// </summary>
     private static string? ResolveBootstrap()
     {
-        var candidate = Path.Combine(AppContext.BaseDirectory, BootstrapExeName);
-        return File.Exists(candidate) ? candidate : null;
+        var embedded = TryExtractEmbeddedBootstrap();
+        if (embedded is not null) return embedded;
+
+        var sideBySide = Path.Combine(AppContext.BaseDirectory, BootstrapExeName);
+        return File.Exists(sideBySide) ? sideBySide : null;
+    }
+
+    /// <summary>
+    /// Extracts the embedded bootstrap (logical name <c>SIDMSetup-Bootstrap.exe</c>)
+    /// to a per-run temp folder and returns its path, or null when no resource
+    /// is embedded (dev/IDE builds). Best-effort: any failure returns null so
+    /// the caller falls back to the side-by-side copy.
+    /// </summary>
+    private static string? TryExtractEmbeddedBootstrap()
+    {
+        try
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            using var stream = asm.GetManifestResourceStream(BootstrapExeName);
+            if (stream is null) return null;
+
+            var dir = Path.Combine(Path.GetTempPath(), "SIDM-Setup", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            var dest = Path.Combine(dir, BootstrapExeName);
+
+            using (var file = File.Create(dest))
+            {
+                stream.CopyTo(file);
+            }
+            return dest;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>

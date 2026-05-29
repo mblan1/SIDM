@@ -201,18 +201,34 @@ if ($velopackExe) {
     throw "Expected Velopack setup exe in $OutputDir (looked for: $($velopackExeCandidates -join ', '))."
 }
 
-Write-Host "==> Publishing SIDM.SetupLauncher" -ForegroundColor Cyan
+# Embed the Velopack bootstrap INSIDE the launcher so the user can download
+# just SIDMSetup.exe and have it work standalone (downloading only the
+# launcher used to fail with "SIDMSetup-Bootstrap.exe not found"). The
+# launcher extracts this embedded copy to temp at run time. The csproj
+# embeds the file at this fixed path when it exists.
+$embedDir = Join-Path $RepoRoot 'src/SIDM.SetupLauncher/embedded'
+$embedTarget = Join-Path $embedDir 'SIDMSetup-Bootstrap.exe'
+New-Item -ItemType Directory -Path $embedDir -Force | Out-Null
+Copy-Item $bootstrapExe $embedTarget -Force
+
+Write-Host "==> Publishing SIDM.SetupLauncher (with embedded bootstrap)" -ForegroundColor Cyan
 $launcherStaging = Join-Path $RepoRoot 'publish/launcher'
 if (Test-Path $launcherStaging) { Remove-Item -Recurse -Force $launcherStaging }
 New-Item -ItemType Directory -Path $launcherStaging | Out-Null
-dotnet publish src/SIDM.SetupLauncher/SIDM.SetupLauncher.csproj `
-    -c Release `
-    -r win-x64 `
-    --self-contained `
-    -p:PublishSingleFile=true `
-    -p:Version=$Version `
-    -o $launcherStaging
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish SIDM.SetupLauncher failed" }
+try {
+    dotnet publish src/SIDM.SetupLauncher/SIDM.SetupLauncher.csproj `
+        -c Release `
+        -r win-x64 `
+        --self-contained `
+        -p:PublishSingleFile=true `
+        -p:Version=$Version `
+        -o $launcherStaging
+    if ($LASTEXITCODE -ne 0) { throw "dotnet publish SIDM.SetupLauncher failed" }
+}
+finally {
+    # Don't leave the 100+ MB embed copy lying in the source tree.
+    if (Test-Path $embedTarget) { Remove-Item -Force $embedTarget }
+}
 
 Copy-Item (Join-Path $launcherStaging 'SIDMSetup.exe') $OutputDir -Force
 

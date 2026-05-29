@@ -15,4 +15,16 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
+  <!-- publish.ps1 drops the Velopack bootstrap here right before publishing
+       the launcher, so it ships embedded inside SIDMSetup.exe. The launcher
+       extracts it to temp at run time (see Program.ResolveBootstrap). The
+       embed copy is git-ignored and removed after publish. When the file is
+       absent (a plain `dotnet build` from the IDE), nothing is embedded and
+       the launcher falls back to the side-by-side bootstrap. -->
+  <ItemGroup Condition="Exists('embedded\SIDMSetup-Bootstrap.exe')">
+    <EmbeddedResource Include="embedded\SIDMSetup-Bootstrap.exe">
+      <LogicalName>SIDMSetup-Bootstrap.exe</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>
