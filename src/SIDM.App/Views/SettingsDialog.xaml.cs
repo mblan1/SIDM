@@ -196,16 +196,30 @@ public partial class SettingsDialog : FluentWindow
         ViewModel.UpdateReadyToApply = result.State == UpdateCheckState.UpdateAvailable;
     }
 
-    private void OnApplyUpdate(object sender, RoutedEventArgs e)
+    private async void OnApplyUpdate(object sender, RoutedEventArgs e)
     {
-        // ApplyUpdatesAndRestart kills the current process and relaunches the
-        // new one — the OS dispatches a fresh SIDM.App.exe under the hood.
-        // There's no path back from here; nothing to await.
-        var applied = _updater.ApplyPendingAndRestart();
-        if (!applied)
+        // Download (with progress shown in the status text) then apply +
+        // restart. The package is usually pre-downloaded by the background
+        // check, so this jumps to 100% quickly; on a fresh/partial download
+        // the user sees real progress. ApplyPendingAndRestart does not return
+        // on success — Velopack terminates the process.
+        ViewModel.UpdateReadyToApply = false;
+        var progress = new Progress<int>(p =>
+            ViewModel.UpdateStatus = p > 0 ? $"Downloading update… {p}%" : "Downloading update…");
+
+        var downloaded = await _updater.DownloadPendingAsync(progress);
+        if (!downloaded)
         {
-            ViewModel.UpdateStatus = "No pending update to apply.";
-            ViewModel.UpdateReadyToApply = false;
+            ViewModel.UpdateStatus = "Update download failed. Check your connection and try again.";
+            ViewModel.UpdateReadyToApply = true;
+            return;
+        }
+
+        ViewModel.UpdateStatus = "Installing and restarting…";
+        if (!_updater.ApplyPendingAndRestart())
+        {
+            ViewModel.UpdateStatus = "Could not apply the update.";
+            ViewModel.UpdateReadyToApply = true;
         }
     }
 

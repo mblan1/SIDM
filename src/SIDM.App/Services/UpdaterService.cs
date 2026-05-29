@@ -230,6 +230,34 @@ public sealed class UpdaterService
     }
 
     /// <summary>
+    /// (Re-)downloads the pending update, reporting 0–100% progress. Velopack
+    /// caches partial/complete downloads, so when the background check already
+    /// pre-downloaded the package this returns near-instantly at 100%; when it
+    /// hasn't (or only partially), the caller gets real progress to show in a
+    /// bar. Returns false when there's nothing to download or the app isn't an
+    /// installed build.
+    /// </summary>
+    public async Task<bool> DownloadPendingAsync(IProgress<int>? progress, CancellationToken cancellationToken = default)
+    {
+        if (_pendingUpdate is null || string.IsNullOrWhiteSpace(FeedUrl)) return false;
+        try
+        {
+            var manager = new UpdateManager(BuildSource(FeedUrl!));
+            if (!manager.IsInstalled) return false;
+            await manager.DownloadUpdatesAsync(
+                _pendingUpdate,
+                progress is null ? null : p => progress.Report(p),
+                cancelToken: cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to download pending update");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Applies the pending update and restarts. Returns false if no update is
     /// ready (caller should call <see cref="CheckAsync"/> first).
     /// </summary>
@@ -274,8 +302,14 @@ public sealed class UpdaterService
 /// </summary>
 public sealed class UpdaterStartupCheck : IHostedService
 {
+    /// <summary>How often to re-check for updates while SIDM keeps running.
+    /// Long enough not to hammer GitHub, short enough that a days-long tray
+    /// session still notices a new release without a restart.</summary>
+    private static readonly TimeSpan RecheckInterval = TimeSpan.FromHours(6);
+
     private readonly UpdaterService _updater;
     private readonly ILogger<UpdaterStartupCheck> _logger;
+    private readonly CancellationTokenSource _cts = new();
 
     public UpdaterStartupCheck(UpdaterService updater, ILogger<UpdaterStartupCheck> logger)
     {
@@ -288,23 +322,52 @@ public sealed class UpdaterStartupCheck : IHostedService
         await _updater.LoadAsync(cancellationToken).ConfigureAwait(false);
         if (!_updater.AutoCheckOnStartup) return;
 
-        // Run on a background task so we don't delay the main window.
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var result = await _updater.CheckAsync().ConfigureAwait(false);
-                if (result.State == UpdateCheckState.UpdateAvailable)
-                {
-                    _logger.LogInformation("Update available: {Version}", result.AvailableVersion);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Startup update check failed (silent)");
-            }
-        }, cancellationToken);
+        // Run on a background task so we don't delay the main window. Checks
+        // once immediately, then on a timer for the lifetime of the app. Each
+        // successful "update available" raises UpdaterService.UpdateAvailable,
+        // which drives the tray balloon and (when the main window is open) the
+        // forced-update gate — so a running instance picks up new releases
+        // without a restart.
+        _ = Task.Run(() => RunLoopAsync(_cts.Token), _cts.Token);
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    private async Task RunLoopAsync(CancellationToken ct)
+    {
+        await RunOnceAsync().ConfigureAwait(false);
+
+        try
+        {
+            using var timer = new PeriodicTimer(RecheckInterval);
+            while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+            {
+                await RunOnceAsync().ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // App shutting down — stop quietly.
+        }
+    }
+
+    private async Task RunOnceAsync()
+    {
+        try
+        {
+            var result = await _updater.CheckAsync().ConfigureAwait(false);
+            if (result.State == UpdateCheckState.UpdateAvailable)
+            {
+                _logger.LogInformation("Update available: {Version}", result.AvailableVersion);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Update check failed (silent)");
+        }
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _cts.Cancel();
+        return Task.CompletedTask;
+    }
 }

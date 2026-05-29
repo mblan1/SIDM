@@ -79,21 +79,24 @@ public partial class MainWindow : FluentWindow
 
         _forcedUpdatePrompted = true;
 
-        var dlg = new UpdateRequiredDialog(pending.AvailableVersion) { Owner = this };
+        // The dialog owns the download-with-progress + apply-and-restart flow.
+        // On a successful apply it never returns (Velopack kills the process).
+        // It closes with Choice == Exit when the user declines, or stays/returns
+        // after a failed download so the user can retry or exit.
+        var dlg = new UpdateRequiredDialog(pending.AvailableVersion, _updater) { Owner = this };
         dlg.ShowDialog();
 
-        if (dlg.Choice == UpdateRequiredDialog.UpdateChoice.Update)
-        {
-            // Velopack kills + relaunches on success. On failure, fall through
-            // and let the user keep working rather than trapping them.
-            if (_updater.ApplyPendingAndRestart()) return;
-            _forcedUpdatePrompted = false; // allow a retry on next open
-        }
-        else
+        if (dlg.Choice == UpdateRequiredDialog.UpdateChoice.Exit)
         {
             // User declined — outdated builds aren't allowed to run.
             _closeBehavior.RequestExit();
             System.Windows.Application.Current.Shutdown();
+        }
+        else
+        {
+            // Update was chosen but we're still here → apply failed. Let them
+            // retry on the next open instead of trapping them now.
+            _forcedUpdatePrompted = false;
         }
     }
 

@@ -44,15 +44,22 @@
                         <TextBlock x:Name="DetailText"
                                    Margin="0,8,0,0" Opacity="0.8" FontSize="12" TextWrapping="Wrap"
                                    Text="You need to update to keep using SIDM. This takes a few seconds and SIDM will restart automatically." />
+
+                        <!-- Download progress — hidden until the user clicks Update now. -->
+                        <StackPanel x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,12,0,0">
+                            <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Height="6" />
+                            <TextBlock x:Name="ProgressText" Margin="0,6,0,0" FontSize="11" Opacity="0.75"
+                                       Text="Downloading update…" />
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-                <ui:Button Content="Exit SIDM" Margin="0,0,8,0"
+            <StackPanel x:Name="ButtonRow" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <ui:Button x:Name="ExitButton" Content="Exit SIDM" Margin="0,0,8,0"
                            Icon="{ui:SymbolIcon Symbol=Dismiss24}"
                            Click="OnExit" />
-                <ui:Button Content="Update now" Appearance="Primary"
+                <ui:Button x:Name="UpdateButton" Content="Update now" Appearance="Primary"
                            Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
                            Click="OnUpdate" IsDefault="True" />
             </StackPanel>
