@@ -201,9 +201,11 @@ function tryPlace(): boolean {
         }
     }
 
-    // Floating fallback only when a <video> is on the page. Keeps the button
-    // off plain navigation pages (YouTube subscriptions feed, channel home).
-    if (document.querySelector('video')) {
+    // Floating fallback (any site without a hand-tuned placement). Only when
+    // the page has a reasonably-sized <video> — a real player, not a tiny
+    // inline preview / autoplay thumbnail — so the button doesn't litter
+    // every page that happens to embed a small clip.
+    if (hasRealVideo()) {
         try {
             document.body.appendChild(makeFloatingButton());
             LOG('injected floating fallback (no host placement matched)');
@@ -213,6 +215,16 @@ function tryPlace(): boolean {
         }
     }
     return false;
+}
+
+// True when the page has a video element at least ~320px wide (a genuine
+// player). Guards the floating button on broad all-sites injection.
+function hasRealVideo(): boolean {
+    const videos = Array.from(document.querySelectorAll('video'));
+    return videos.some(v => {
+        const r = v.getBoundingClientRect();
+        return r.width >= 320 && r.height >= 180;
+    });
 }
 
 let lastUrl = location.href;

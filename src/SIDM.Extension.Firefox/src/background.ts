@@ -233,6 +233,16 @@ function notifyError(title: string, body: string): void {
 
 const MINIMAL_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" rx="8" fill="#0078D4"/><path d="M24 12 L24 30 M16 24 L24 32 L32 24 M14 36 L34 36" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
+/**
+ * Opens the format-picker popup window for a URL. Shared by the content-script
+ * overlay button and the right-click context menu, so any site yt-dlp supports
+ * can be downloaded with a format choice — not just the hand-tuned hosts.
+ */
+function openPickerWindow(url: string): Promise<chrome.windows.Window> {
+    const target = chrome.runtime.getURL('picker.html') + '?url=' + encodeURIComponent(url);
+    return chrome.windows.create({ url: target, type: 'popup', width: 480, height: 600 });
+}
+
 // --- Wiring ---
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -241,10 +251,21 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 
     chrome.contextMenus.removeAll(() => {
+        // Direct capture — for a concrete file/media URL behind a link or an
+        // <audio>/<video> src. Sends the URL straight to SIDM.
         chrome.contextMenus.create({
             id: 'sidm-download-link',
             title: 'Download with SIDM',
             contexts: ['link', 'video', 'audio'],
+        });
+        // Format picker — works on the current PAGE (any yt-dlp-supported
+        // site, not just YouTube). Probes the page URL and lets the user pick
+        // a video resolution or audio-only track. Always available via
+        // right-click anywhere on the page.
+        chrome.contextMenus.create({
+            id: 'sidm-pick-format',
+            title: 'Download video / audio with SIDM…',
+            contexts: ['page', 'video', 'audio', 'frame', 'selection', 'link'],
         });
     });
 });
@@ -256,6 +277,26 @@ chrome.downloads.onCreated.addListener((item) => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info) => {
+    // Format-picker entry: open the picker for the most relevant URL. For a
+    // right-click directly on media, prefer its http(s) src; otherwise (and
+    // for the YouTube case where srcUrl is a blob: stream) use the page URL,
+    // which is what yt-dlp actually needs.
+    if (info.menuItemId === 'sidm-pick-format') {
+        const src = info.srcUrl;
+        const usableSrc = src && /^https?:/i.test(src) ? src : undefined;
+        const url = usableSrc ?? info.linkUrl ?? info.frameUrl ?? info.pageUrl;
+        if (!url || !/^https?:/i.test(url)) {
+            notifyError('Nothing to download here', 'Open the page with the video, then try again.');
+            return;
+        }
+        try {
+            await openPickerWindow(url);
+        } catch (e) {
+            notifyError('Could not open the format picker', String(e));
+        }
+        return;
+    }
+
     if (info.menuItemId !== 'sidm-download-link') return;
     const url = info.linkUrl || info.srcUrl;
     if (!url) return;
@@ -308,15 +349,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'sidm:open-picker') {
         const url = String(message.url ?? '');
         if (!url) { sendResponse({ ok: false, error: 'no url' }); return true; }
-        const target = chrome.runtime.getURL('picker.html') +
-            '?url=' + encodeURIComponent(url);
-        chrome.windows.create({
-            url: target,
-            type: 'popup',
-            width: 480,
-            height: 600,
-        }).then(() => sendResponse({ ok: true }),
-                (e) => sendResponse({ ok: false, error: String(e) }));
+        openPickerWindow(url).then(
+            () => sendResponse({ ok: true }),
+            (e) => sendResponse({ ok: false, error: String(e) }));
         return true;
     }
 
