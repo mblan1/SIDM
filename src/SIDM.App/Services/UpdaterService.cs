@@ -302,10 +302,9 @@ public sealed class UpdaterService
 /// </summary>
 public sealed class UpdaterStartupCheck : IHostedService
 {
-    /// <summary>How often to re-check for updates while SIDM keeps running.
-    /// Long enough not to hammer GitHub, short enough that a days-long tray
-    /// session still notices a new release without a restart.</summary>
-    private static readonly TimeSpan RecheckInterval = TimeSpan.FromHours(6);
+    /// <summary>How often to re-check for updates while SIDM keeps running, so
+    /// a long-lived session notices a new release without a restart.</summary>
+    private static readonly TimeSpan RecheckInterval = TimeSpan.FromHours(1);
 
     private readonly UpdaterService _updater;
     private readonly ILogger<UpdaterStartupCheck> _logger;
