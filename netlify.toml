@@ -4,6 +4,7 @@
 # step is needed — Netlify just uploads that folder as the publish root.
 #
 # Site: https://snw-sidm.netlify.app  (siteId 7cbb9f92-1a42-4d77-96a3-8116ee85e613)
+# Site: https://sidm.snw.id.vn  (siteId 7cbb9f92-1a42-4d77-96a3-8116ee85e613)
 
 [build]
   publish = "docs/landing"
