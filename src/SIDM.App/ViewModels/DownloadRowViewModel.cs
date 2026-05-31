@@ -82,7 +82,7 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
     /// and cached process-wide. Null if the shell call fails, in which case
     /// the XAML template falls back to the monochrome <see cref="FileIcon"/>.
     /// </summary>
-    public System.Windows.Media.ImageSource? FileIconImage => FileIconProvider.GetIcon(ExtensionLower);
+    public System.Windows.Media.ImageSource? FileIconImage => FileIconProvider.GetIconForFile(TargetPath, ExtensionLower);
 
     public ObservableCollection<SegmentProgressViewModel> SegmentRows { get; }
 
@@ -470,6 +470,10 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(SegmentSummary));
                 OnPropertyChanged(nameof(TransferRateDisplay));
                 OnPropertyChanged(nameof(TimeLeftDisplay));
+                // The on-disk file now exists (or was renamed) — re-resolve the
+                // shell icon so executables pick up their real embedded logo.
+                OnPropertyChanged(nameof(FileName));
+                OnPropertyChanged(nameof(FileIconImage));
             }
             if (dispatcher is null || dispatcher.CheckAccess()) apply();
             else dispatcher.BeginInvoke(apply);
@@ -481,6 +485,8 @@ public partial class DownloadRowViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(StatusDisplay));
             OnPropertyChanged(nameof(TotalBytesDisplay));
             OnPropertyChanged(nameof(LastTryDisplay));
+            OnPropertyChanged(nameof(FileName));
+            OnPropertyChanged(nameof(FileIconImage));
         }
     }
 

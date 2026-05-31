@@ -19,6 +19,26 @@
                  WindowStartupLocation="CenterOwner"
                  ShowInTaskbar="False"
                  d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}">
+    <ui:FluentWindow.Resources>
+        <!-- Shared cell style for the Settings DataGrids (Schedule rules,
+             Categories). Without an explicit selection trigger the default
+             selection highlight is washed out against the Mica/transparent
+             backdrop, so a selected or focused row gave no visual feedback.
+             This paints the selected row with the accent fill like the main
+             downloads grid. -->
+        <Style x:Key="SettingsGridCellStyle" TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </ui:FluentWindow.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -95,6 +115,8 @@
                               GridLinesVisibility="None"
                               HeadersVisibility="Column"
                               SelectionMode="Single"
+                              SelectionUnit="FullRow"
+                              CellStyle="{StaticResource SettingsGridCellStyle}"
                               Background="Transparent"
                               RowBackground="Transparent"
                               AlternatingRowBackground="#11FFFFFF"
@@ -130,6 +152,8 @@
                               GridLinesVisibility="None"
                               HeadersVisibility="Column"
                               SelectionMode="Single"
+                              SelectionUnit="FullRow"
+                              CellStyle="{StaticResource SettingsGridCellStyle}"
                               Background="Transparent"
                               RowBackground="Transparent"
                               AlternatingRowBackground="#11FFFFFF"
@@ -259,7 +283,9 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <ui:TextBox Grid.Column="0" Text="{Binding UpdateFeedUrl, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                    <ui:TextBox Grid.Column="0" Text="{Binding UpdateFeedUrl, Mode=OneWay}"
+                                IsReadOnly="True"
+                                ToolTip="{Binding UpdateFeedUrl}"
                                 PlaceholderText="https://github.com/owner/SIDM or https://releases.snw.dev/sidm/" />
                     <ui:Button Grid.Column="1" Margin="8,0,0,0" Content="Check now" Click="OnCheckUpdates" />
                 </Grid>

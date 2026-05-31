@@ -379,6 +379,34 @@ public partial class BrowserExtensionInstallDialog : FluentWindow
         }
     }
 
+    /// <summary>
+    /// Open folder — reveals the unpacked SIDM extension folder for this
+    /// browser in Explorer so the user can inspect or edit the loaded files.
+    /// </summary>
+    private void OnOpenExtensionFolderClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Wpf.Ui.Controls.Button btn) return;
+        if (btn.Tag is not BrowserInstallRowViewModel row) return;
+
+        try
+        {
+            var folder = BrowserExtensionInstaller.ExtensionFolder(row.Browser.Kind);
+            if (Directory.Exists(folder))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+                row.StatusLine = $"Opened the SIDM extension folder for {row.Browser.Kind.DisplayName()}.";
+            }
+            else
+            {
+                row.StatusLine = "Extension folder isn't on disk yet — install it first.";
+            }
+        }
+        catch (Exception ex)
+        {
+            row.StatusLine = $"Couldn't open folder: {ex.Message}";
+        }
+    }
+
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
     // -- Guide view ----------------------------------------------------------

@@ -228,6 +228,16 @@
                         <Setter Property="VerticalAlignment" Value="Center" />
                     </Style>
 
+                    <!-- Explicit ElementStyle for the text columns. The implicit
+                         TextBlock style above doesn't always reach the elements
+                         DataGridTextColumn generates in code, leaving their text
+                         top-aligned in the 40px rows. Assigning this as each
+                         column's ElementStyle guarantees vertical centering. -->
+                    <Style x:Key="CellTextColumnStyle" TargetType="TextBlock">
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                    </Style>
+
                     <!-- Right-click actions on a download row. The ContextMenu
                          lives in resources (rather than inline in the Style
                          Setter) because WPF won't accept Click handlers on
@@ -336,12 +346,12 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Header="Size" Binding="{Binding SizeDisplay}" Width="Auto" MinWidth="140" />
-                    <DataGridTextColumn Header="Status" Binding="{Binding StatusDisplay}" Width="Auto" MinWidth="90" />
-                    <DataGridTextColumn Header="Time left" Binding="{Binding TimeLeftDisplay}" Width="Auto" MinWidth="80" />
-                    <DataGridTextColumn Header="Transfer rate" Binding="{Binding TransferRateDisplay}" Width="Auto" MinWidth="100" />
-                    <DataGridTextColumn Header="Last Try" Binding="{Binding LastTryDisplay}" Width="Auto" MinWidth="110" />
-                    <DataGridTextColumn Header="Description" Binding="{Binding DescriptionDisplay}" Width="*" MinWidth="120" />
+                    <DataGridTextColumn Header="Size" Binding="{Binding SizeDisplay}" Width="Auto" MinWidth="140" ElementStyle="{StaticResource CellTextColumnStyle}" />
+                    <DataGridTextColumn Header="Status" Binding="{Binding StatusDisplay}" Width="Auto" MinWidth="90" ElementStyle="{StaticResource CellTextColumnStyle}" />
+                    <DataGridTextColumn Header="Time left" Binding="{Binding TimeLeftDisplay}" Width="Auto" MinWidth="80" ElementStyle="{StaticResource CellTextColumnStyle}" />
+                    <DataGridTextColumn Header="Transfer rate" Binding="{Binding TransferRateDisplay}" Width="Auto" MinWidth="100" ElementStyle="{StaticResource CellTextColumnStyle}" />
+                    <DataGridTextColumn Header="Last Try" Binding="{Binding LastTryDisplay}" Width="Auto" MinWidth="110" ElementStyle="{StaticResource CellTextColumnStyle}" />
+                    <DataGridTextColumn Header="Description" Binding="{Binding DescriptionDisplay}" Width="*" MinWidth="120" ElementStyle="{StaticResource CellTextColumnStyle}" />
                 </DataGrid.Columns>
             </DataGrid>
         </Grid>

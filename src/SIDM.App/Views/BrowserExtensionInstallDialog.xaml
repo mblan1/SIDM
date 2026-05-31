@@ -70,6 +70,16 @@
 
                                     <StackPanel Grid.Column="1" Orientation="Horizontal"
                                                 VerticalAlignment="Center">
+                                        <!-- "Open folder" — reveals the unpacked extension files on
+                                             disk in Explorer. Visible once connected so the user can
+                                             inspect/edit the loaded extension folder. -->
+                                        <ui:Button Content="Open folder"
+                                                   Appearance="Secondary"
+                                                   Icon="{ui:SymbolIcon Symbol=FolderOpen24}"
+                                                   Margin="0,0,8,0"
+                                                   Tag="{Binding}"
+                                                   Click="OnOpenExtensionFolderClick"
+                                                   Visibility="{Binding ShowSecondaryButton, Converter={StaticResource BoolToVisibilityConverter}}" />
                                         <!-- Secondary "Reload" action — only meaningful when the
                                              extension is connected. Lets the user kick the
                                              extension after manually editing the unpacked folder

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -20,6 +21,18 @@ namespace SIDM.App.Services;
 public static class FileIconProvider
 {
     private static readonly ConcurrentDictionary<string, ImageSource?> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, ImageSource?> _pathCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Extensions whose icon is embedded in the file itself rather than
+    /// registered once for the whole type. For these, the per-extension
+    /// lookup just returns the generic "application"/"shortcut" glyph — the
+    /// real icon (the app's own logo) only comes from reading the actual
+    /// file on disk. Everything else shares one registered icon per type, so
+    /// the cheaper extension lookup is identical and we skip the disk hit.
+    /// </summary>
+    private static readonly HashSet<string> EmbeddedIconExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { "exe", "scr", "dll", "ico", "lnk", "cpl", "msc" };
 
     /// <summary>
     /// Returns the shell icon for the given lowercase, dot-less extension
@@ -30,6 +43,33 @@ public static class FileIconProvider
     {
         var ext = string.IsNullOrWhiteSpace(extensionLower) ? string.Empty : extensionLower;
         return _cache.GetOrAdd(ext, LoadIconForExtension);
+    }
+
+    /// <summary>
+    /// Returns the best icon for a specific downloaded file. When the file
+    /// exists on disk and is an executable-type that embeds its own icon
+    /// (.exe, .lnk, …), extracts the real icon from the file so e.g. the
+    /// Genshin installer shows its own logo instead of the generic .exe
+    /// glyph. Otherwise (file not yet on disk, or a type with one shared
+    /// icon) falls back to the per-extension lookup.
+    /// </summary>
+    public static ImageSource? GetIconForFile(string? fullPath, string? extensionLower)
+    {
+        if (!string.IsNullOrEmpty(fullPath)
+            && extensionLower is not null
+            && EmbeddedIconExtensions.Contains(extensionLower))
+        {
+            try
+            {
+                if (File.Exists(fullPath))
+                    return _pathCache.GetOrAdd(fullPath, LoadIconForPath);
+            }
+            catch
+            {
+                // Fall through to the per-extension icon on any IO/shell error.
+            }
+        }
+        return GetIcon(extensionLower);
     }
 
     private static ImageSource? LoadIconForExtension(string ext)
@@ -46,8 +86,32 @@ public static class FileIconProvider
             (uint)Marshal.SizeOf(shfi),
             SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | SHGFI_LARGEICON);
 
-        if (result == IntPtr.Zero || shfi.hIcon == IntPtr.Zero) return null;
+        return BitmapFromShfi(shfi);
+    }
 
+    /// <summary>
+    /// Loads the icon embedded in an actual file on disk (no
+    /// USEFILEATTRIBUTES — the shell reads the file itself), so executables
+    /// surface their own logo. Returns null on any failure.
+    /// </summary>
+    private static ImageSource? LoadIconForPath(string fullPath)
+    {
+        var shfi = new SHFILEINFO();
+        var result = SHGetFileInfo(
+            fullPath,
+            FILE_ATTRIBUTE_NORMAL,
+            ref shfi,
+            (uint)Marshal.SizeOf(shfi),
+            SHGFI_ICON | SHGFI_LARGEICON);
+
+        if (result == IntPtr.Zero || shfi.hIcon == IntPtr.Zero) return null;
+        return BitmapFromShfi(shfi);
+    }
+
+    /// <summary>Converts an <see cref="SHFILEINFO"/>'s HICON into a frozen,
+    /// thread-safe <see cref="ImageSource"/> and destroys the native handle.</summary>
+    private static ImageSource? BitmapFromShfi(SHFILEINFO shfi)
+    {
         try
         {
             var source = Imaging.CreateBitmapSourceFromHIcon(
