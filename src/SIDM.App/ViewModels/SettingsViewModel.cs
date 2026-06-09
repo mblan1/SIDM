@@ -41,6 +41,23 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string? _ytDlpStatus;
 
+    /// <summary>True when SIDM's managed yt-dlp.exe is present — flips the
+    /// Install button to "Check for updates" + shows Uninstall.</summary>
+    [ObservableProperty]
+    private bool _ytDlpInstalled;
+
+    /// <summary>True after a check finds a newer yt-dlp — shows the Update button.</summary>
+    [ObservableProperty]
+    private bool _ytDlpUpdateAvailable;
+
+    /// <summary>True when SIDM's managed ffmpeg.exe is present.</summary>
+    [ObservableProperty]
+    private bool _ffmpegInstalled;
+
+    /// <summary>True after a check finds a newer ffmpeg build.</summary>
+    [ObservableProperty]
+    private bool _ffmpegUpdateAvailable;
+
     [ObservableProperty]
     private string? _updateFeedUrl;
 
@@ -66,6 +83,10 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>Close-button behavior. Bound to a ComboBox.SelectedIndex (HideToTray=0, Exit=1).</summary>
     [ObservableProperty]
     private int _closeBehaviorIndex;
+
+    /// <summary>Whether SIDM launches (hidden, to the tray) when Windows starts. Default ON.</summary>
+    [ObservableProperty]
+    private bool _startWithWindows = true;
 
     public ObservableCollection<ScheduleRuleRowViewModel> Rules { get; } = new();
 

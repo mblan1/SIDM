@@ -39,6 +39,10 @@ public partial class App : Application
         // the WPF UI during a silent hook and the install would visibly hang.
         VelopackApp.Build()
             .WithFirstRun(_ => OnFirstRun())
+            // On uninstall, drop the "Start with Windows" Run entry so we don't
+            // leave an orphan pointing at a deleted exe. Static + DI-free so it
+            // works inside Velopack's fast uninstall hook.
+            .WithBeforeUninstallFastCallback((_) => Services.StartupService.RemoveFromStartupForUninstall())
             .Run();
 
         _cliArgs = Environment.GetCommandLineArgs().Skip(1).ToArray();
@@ -192,6 +196,11 @@ public partial class App : Application
         // main window appears so MainWindow.OnWindowClosing sees the right
         // value the first time the user hits X.
         await _host.Services.GetRequiredService<Services.CloseBehaviorService>().LoadAsync();
+
+        // Reconcile "Start with Windows" — defaults ON on a fresh install and
+        // rewrites the HKCU Run entry to the current exe path so it survives
+        // updates / a moved install. Best-effort; never blocks startup.
+        await _host.Services.GetRequiredService<Services.StartupService>().LoadAndReconcileAsync();
 
         // Load extension presence so the MainWindow banner + install dialog
         // know up-front which browser kinds have ever connected.

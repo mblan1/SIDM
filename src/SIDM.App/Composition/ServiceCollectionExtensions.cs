@@ -37,6 +37,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<OnboardingService>();
         services.AddSingleton<CategorySeeder>();
         services.AddSingleton<CloseBehaviorService>();
+        services.AddSingleton<StartupService>();
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<BrowserExtensionPresence>();
         services.AddSingleton<BrowserExtensionInstaller>();

@@ -1,6 +1,7 @@
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
@@ -23,6 +24,7 @@ public partial class SettingsDialog : FluentWindow
     private readonly CrashReportingService _crashReporting;
     private readonly ThemeService _theme;
     private readonly CloseBehaviorService _closeBehavior;
+    private readonly StartupService _startup;
     private readonly BrowserExtensionInstaller _extensionInstaller;
     private readonly BrowserExtensionPresence _extensionPresence;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -39,6 +41,7 @@ public partial class SettingsDialog : FluentWindow
         CrashReportingService crashReporting,
         ThemeService theme,
         CloseBehaviorService closeBehavior,
+        StartupService startup,
         BrowserExtensionInstaller extensionInstaller,
         BrowserExtensionPresence extensionPresence,
         IServiceScopeFactory scopeFactory,
@@ -53,6 +56,7 @@ public partial class SettingsDialog : FluentWindow
         _crashReporting = crashReporting;
         _theme = theme;
         _closeBehavior = closeBehavior;
+        _startup = startup;
         _extensionInstaller = extensionInstaller;
         _extensionPresence = extensionPresence;
         _scopeFactory = scopeFactory;
@@ -70,6 +74,12 @@ public partial class SettingsDialog : FluentWindow
         ViewModel.CrashReportsDsn = _crashReporting.Dsn;
         ViewModel.ThemeIndex = (int)_theme.Current;
         ViewModel.CloseBehaviorIndex = (int)_closeBehavior.Current;
+        ViewModel.StartWithWindows = _startup.IsEnabled;
+
+        // Drive the Install-vs-"Check for updates" button swap off whether the
+        // SIDM-managed binaries are present.
+        ViewModel.YtDlpInstalled = File.Exists(ManagedYtDlpPath);
+        ViewModel.FfmpegInstalled = File.Exists(ManagedFfmpegPath);
 
         _ = LoadRulesAsync();
         _ = LoadCategoriesAsync();
@@ -178,6 +188,9 @@ public partial class SettingsDialog : FluentWindow
 
         await _theme.SetAsync((AppTheme)ViewModel.ThemeIndex);
         await _closeBehavior.SaveAsync((CloseBehavior)ViewModel.CloseBehaviorIndex);
+
+        // Persist "Start with Windows" + add/remove the HKCU Run entry now.
+        await _startup.SetEnabledAsync(ViewModel.StartWithWindows);
 
         DialogResult = true;
         Close();
@@ -296,7 +309,18 @@ public partial class SettingsDialog : FluentWindow
     /// </summary>
     private async void OnInstallYtDlp(object sender, RoutedEventArgs e)
     {
-        if (sender is not Wpf.Ui.Controls.Button btn) return;
+        if (sender is Wpf.Ui.Controls.Button btn) await InstallManagedYtDlpAsync(btn);
+    }
+
+    // Update is the same action as Install — re-pull the latest exe over the
+    // managed copy. Separate handler so it can carry its own button label.
+    private async void OnUpdateYtDlp(object sender, RoutedEventArgs e)
+    {
+        if (sender is Wpf.Ui.Controls.Button btn) await InstallManagedYtDlpAsync(btn);
+    }
+
+    private async Task InstallManagedYtDlpAsync(Wpf.Ui.Controls.Button btn)
+    {
         var originalContent = btn.Content;
         btn.IsEnabled = false;
         btn.Content = "Installing…";
@@ -315,6 +339,8 @@ public partial class SettingsDialog : FluentWindow
             // Uninstall clears this when it deletes the file.
             ViewModel.YtDlpPath = dest;
             await _videoGrabber.SetYtDlpPathAsync(dest);
+            ViewModel.YtDlpInstalled = true;
+            ViewModel.YtDlpUpdateAvailable = false;
 
             var version = await YtDlpPathResolver.TryGetYtDlpVersionAsync(dest);
             ViewModel.YtDlpStatus = version is null
@@ -328,6 +354,51 @@ public partial class SettingsDialog : FluentWindow
         finally
         {
             btn.Content = originalContent;
+            btn.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Compares the managed yt-dlp.exe's reported version against the latest
+    /// GitHub release tag. yt-dlp versions are date-based (YYYY.MM.DD) and the
+    /// tag matches what <c>--version</c> prints, so an exact-mismatch means a
+    /// newer build is out.
+    /// </summary>
+    private async void OnCheckYtDlpUpdate(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Wpf.Ui.Controls.Button btn) return;
+        var original = btn.Content;
+        btn.IsEnabled = false;
+        btn.Content = "Checking…";
+        ViewModel.YtDlpStatus = "Checking GitHub for a newer yt-dlp…";
+        try
+        {
+            var installed = await YtDlpPathResolver.TryGetYtDlpVersionAsync(ManagedYtDlpPath);
+            var latest = await GetLatestGitHubTagAsync("yt-dlp/yt-dlp");
+            if (latest is null)
+            {
+                ViewModel.YtDlpStatus = "Couldn't reach GitHub to check for a yt-dlp update.";
+                return;
+            }
+
+            if (installed is not null && string.Equals(installed, latest, StringComparison.OrdinalIgnoreCase))
+            {
+                ViewModel.YtDlpUpdateAvailable = false;
+                ViewModel.YtDlpStatus = $"yt-dlp is up to date (v{installed}).";
+            }
+            else
+            {
+                ViewModel.YtDlpUpdateAvailable = true;
+                ViewModel.YtDlpStatus = $"yt-dlp update available: v{installed ?? "?"} → v{latest}. Click Update to install it.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ViewModel.YtDlpStatus = $"yt-dlp update check failed: {ex.Message}";
+        }
+        finally
+        {
+            btn.Content = original;
             btn.IsEnabled = true;
         }
     }
@@ -349,6 +420,8 @@ public partial class SettingsDialog : FluentWindow
         try
         {
             File.Delete(dest);
+            ViewModel.YtDlpInstalled = false;
+            ViewModel.YtDlpUpdateAvailable = false;
 
             // If the override points at the now-deleted file, clear it so the
             // resolver falls through to PATH instead of returning a stale
@@ -374,6 +447,7 @@ public partial class SettingsDialog : FluentWindow
     /// </summary>
     private void OnRefreshYtDlp(object sender, RoutedEventArgs e)
     {
+        ViewModel.YtDlpInstalled = File.Exists(ManagedYtDlpPath);
         ViewModel.YtDlpStatus = BuildResolvedPathStatus();
     }
 
@@ -422,7 +496,17 @@ public partial class SettingsDialog : FluentWindow
     /// </summary>
     private async void OnInstallFfmpeg(object sender, RoutedEventArgs e)
     {
-        if (sender is not Wpf.Ui.Controls.Button btn) return;
+        if (sender is Wpf.Ui.Controls.Button btn) await InstallManagedFfmpegAsync(btn);
+    }
+
+    // Update == re-pull the latest build over the managed copy.
+    private async void OnUpdateFfmpeg(object sender, RoutedEventArgs e)
+    {
+        if (sender is Wpf.Ui.Controls.Button btn) await InstallManagedFfmpegAsync(btn);
+    }
+
+    private async Task InstallManagedFfmpegAsync(Wpf.Ui.Controls.Button btn)
+    {
         var originalContent = btn.Content;
         btn.IsEnabled = false;
         btn.Content = "Installing…";
@@ -456,6 +540,17 @@ public partial class SettingsDialog : FluentWindow
             // binary landed, and Uninstall clears it when it deletes.
             ViewModel.FfmpegPath = ManagedFfmpegPath;
             await _videoGrabber.SetFfmpegPathAsync(ManagedFfmpegPath);
+            ViewModel.FfmpegInstalled = true;
+            ViewModel.FfmpegUpdateAvailable = false;
+
+            // Record the build we just installed so a later "Check for updates"
+            // can tell whether a newer rolling build has been published.
+            try
+            {
+                var stamp = await GetLatestFfmpegStampAsync();
+                if (stamp is not null) await SetStoredFfmpegStampAsync(stamp);
+            }
+            catch { /* baseline is best-effort */ }
 
             ViewModel.YtDlpStatus = $"Installed ffmpeg at {ManagedFfmpegPath}";
         }
@@ -471,6 +566,58 @@ public partial class SettingsDialog : FluentWindow
         }
     }
 
+    /// <summary>
+    /// ffmpeg from yt-dlp/FFmpeg-Builds is a rolling "latest" build with no real
+    /// version number, so we baseline the release asset's <c>updated_at</c>
+    /// timestamp at install time and compare against the latest on check.
+    /// </summary>
+    private async void OnCheckFfmpegUpdate(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Wpf.Ui.Controls.Button btn) return;
+        var original = btn.Content;
+        btn.IsEnabled = false;
+        btn.Content = "Checking…";
+        ViewModel.YtDlpStatus = "Checking GitHub for a newer ffmpeg build…";
+        try
+        {
+            var latest = await GetLatestFfmpegStampAsync();
+            if (latest is null)
+            {
+                ViewModel.YtDlpStatus = "Couldn't reach GitHub to check for an ffmpeg update.";
+                return;
+            }
+
+            var stored = await GetStoredFfmpegStampAsync();
+            if (stored is null)
+            {
+                // Installed before this feature existed — no baseline to compare.
+                // Record the current build so future checks are precise.
+                await SetStoredFfmpegStampAsync(latest);
+                ViewModel.FfmpegUpdateAvailable = false;
+                ViewModel.YtDlpStatus = "Recorded the current ffmpeg build — you'll be notified when a newer one is published.";
+            }
+            else if (!string.Equals(stored, latest, StringComparison.Ordinal))
+            {
+                ViewModel.FfmpegUpdateAvailable = true;
+                ViewModel.YtDlpStatus = "A newer ffmpeg build is available. Click Update to install it.";
+            }
+            else
+            {
+                ViewModel.FfmpegUpdateAvailable = false;
+                ViewModel.YtDlpStatus = "ffmpeg is up to date.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ViewModel.YtDlpStatus = $"ffmpeg update check failed: {ex.Message}";
+        }
+        finally
+        {
+            btn.Content = original;
+            btn.IsEnabled = true;
+        }
+    }
+
     private async void OnUninstallFfmpeg(object sender, RoutedEventArgs e)
     {
         var dest = ManagedFfmpegPath;
@@ -482,6 +629,9 @@ public partial class SettingsDialog : FluentWindow
         try
         {
             File.Delete(dest);
+            ViewModel.FfmpegInstalled = false;
+            ViewModel.FfmpegUpdateAvailable = false;
+            await SetStoredFfmpegStampAsync(null);
             if (string.Equals(ViewModel.FfmpegPath?.Trim(), dest, StringComparison.OrdinalIgnoreCase))
             {
                 ViewModel.FfmpegPath = string.Empty;
@@ -497,7 +647,71 @@ public partial class SettingsDialog : FluentWindow
 
     private void OnRefreshFfmpeg(object sender, RoutedEventArgs e)
     {
+        ViewModel.FfmpegInstalled = File.Exists(ManagedFfmpegPath);
         ViewModel.YtDlpStatus = BuildResolvedPathStatus();
+    }
+
+    // ---- update-check helpers -------------------------------------------
+
+    /// <summary>Settings key holding the ffmpeg release asset timestamp we last
+    /// installed, so a rolling-build "newer?" comparison is possible.</summary>
+    private const string FfmpegStampSettingKey = "videograbber.ffmpegStamp";
+
+    /// <summary>The exact ffmpeg asset name SIDM downloads from FFmpeg-Builds.</summary>
+    private const string FfmpegAssetName = "ffmpeg-master-latest-win64-gpl.zip";
+
+    /// <summary>
+    /// Fetches the GitHub "latest release" JSON for a repo. GitHub requires a
+    /// User-Agent; we set one explicitly rather than mutate the pooled client.
+    /// Returns null on any non-success / network error so callers degrade
+    /// gracefully to "couldn't check".
+    /// </summary>
+    private async Task<JsonDocument?> FetchLatestReleaseAsync(string repo)
+    {
+        var client = _httpClientFactory.CreateClient("sidm-download");
+        using var req = new HttpRequestMessage(
+            HttpMethod.Get, $"https://api.github.com/repos/{repo}/releases/latest");
+        req.Headers.UserAgent.ParseAdd("SIDM-UpdateCheck");
+        req.Headers.Accept.ParseAdd("application/vnd.github+json");
+        using var resp = await client.SendAsync(req);
+        if (!resp.IsSuccessStatusCode) return null;
+        await using var stream = await resp.Content.ReadAsStreamAsync();
+        return await JsonDocument.ParseAsync(stream);
+    }
+
+    private async Task<string?> GetLatestGitHubTagAsync(string repo)
+    {
+        using var doc = await FetchLatestReleaseAsync(repo);
+        if (doc is null) return null;
+        return doc.RootElement.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
+    }
+
+    private async Task<string?> GetLatestFfmpegStampAsync()
+    {
+        using var doc = await FetchLatestReleaseAsync("yt-dlp/FFmpeg-Builds");
+        if (doc is null) return null;
+        if (!doc.RootElement.TryGetProperty("assets", out var assets)) return null;
+        foreach (var a in assets.EnumerateArray())
+        {
+            if (a.TryGetProperty("name", out var n) && n.GetString() == FfmpegAssetName)
+                return a.TryGetProperty("updated_at", out var u) ? u.GetString() : null;
+        }
+        return null;
+    }
+
+    private async Task<string?> GetStoredFfmpegStampAsync()
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+        return await settings.GetAsync<string>(FfmpegStampSettingKey);
+    }
+
+    private async Task SetStoredFfmpegStampAsync(string? stamp)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+        if (stamp is null) await settings.RemoveAsync(FfmpegStampSettingKey);
+        else await settings.SetAsync(FfmpegStampSettingKey, stamp);
     }
 
     private static string TryGetDirectory(string? path)

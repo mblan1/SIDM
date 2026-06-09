@@ -72,6 +72,12 @@
                     <ComboBoxItem>Exit completely</ComboBoxItem>
                 </ComboBox>
 
+                <TextBlock Margin="0,24,0,0" Text="Startup" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11" TextWrapping="Wrap"
+                           Text="Launch SIDM automatically when you sign in to Windows. It starts hidden in the tray, ready to catch browser downloads — no main window until you open it." />
+                <CheckBox Content="Start SIDM when Windows starts"
+                          IsChecked="{Binding StartWithWindows, Mode=TwoWay}" />
+
                 <TextBlock Margin="0,24,0,0" Text="Maximum concurrent downloads" FontWeight="SemiBold" />
                 <TextBlock Margin="0,2,0,8" Opacity="0.65" FontSize="11"
                            Text="More downloads finish in parallel; the rest wait in the queue." />
@@ -195,14 +201,31 @@
                      the managed copy; Refresh re-runs the resolver and updates the
                      status box. Existing Browse stays for users with a pinned path. -->
                 <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <!-- Install only when the managed copy is absent. Once it's
+                         installed, the slot becomes "Check for updates", and an
+                         "Update" button appears if a newer release is found. -->
                     <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
                                Content="Install"
                                Click="OnInstallYtDlp"
+                               Visibility="{Binding YtDlpInstalled, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=invert}"
                                ToolTip="Download the latest yt-dlp.exe from GitHub into %LocalAppData%\SIDM\bin\." />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowSync24}"
+                               Content="Check for updates"
+                               Click="OnCheckYtDlpUpdate"
+                               Visibility="{Binding YtDlpInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
+                               ToolTip="Compare the installed yt-dlp against the latest GitHub release." />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
+                               Margin="8,0,0,0"
+                               Appearance="Primary"
+                               Content="Update"
+                               Click="OnUpdateYtDlp"
+                               Visibility="{Binding YtDlpUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                               ToolTip="Download and install the newer yt-dlp.exe." />
                     <ui:Button Icon="{ui:SymbolIcon Symbol=Delete24}"
                                Margin="8,0,0,0"
                                Content="Uninstall"
                                Click="OnUninstallYtDlp"
+                               Visibility="{Binding YtDlpInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
                                ToolTip="Remove the SIDM-managed yt-dlp.exe (leaves any user-pinned path alone)." />
                     <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowSync24}"
                                Margin="8,0,0,0"
@@ -231,11 +254,25 @@
                     <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
                                Content="Install"
                                Click="OnInstallFfmpeg"
+                               Visibility="{Binding FfmpegInstalled, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=invert}"
                                ToolTip="Download a static ffmpeg.exe from the yt-dlp/FFmpeg-Builds GitHub release into %LocalAppData%\SIDM\bin\." />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowSync24}"
+                               Content="Check for updates"
+                               Click="OnCheckFfmpegUpdate"
+                               Visibility="{Binding FfmpegInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
+                               ToolTip="Check the yt-dlp/FFmpeg-Builds release for a newer build than the one installed." />
+                    <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowDownload24}"
+                               Margin="8,0,0,0"
+                               Appearance="Primary"
+                               Content="Update"
+                               Click="OnUpdateFfmpeg"
+                               Visibility="{Binding FfmpegUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                               ToolTip="Download and install the newer ffmpeg build." />
                     <ui:Button Icon="{ui:SymbolIcon Symbol=Delete24}"
                                Margin="8,0,0,0"
                                Content="Uninstall"
                                Click="OnUninstallFfmpeg"
+                               Visibility="{Binding FfmpegInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
                                ToolTip="Remove the SIDM-managed ffmpeg.exe (leaves any user-pinned path alone)." />
                     <ui:Button Icon="{ui:SymbolIcon Symbol=ArrowSync24}"
                                Margin="8,0,0,0"
