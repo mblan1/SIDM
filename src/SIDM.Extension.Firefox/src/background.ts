@@ -128,10 +128,24 @@ function ensurePort(): chrome.runtime.Port {
     return port;
 }
 
-async function getSettings(): Promise<SidmSettings> {
-    const stored = await chrome.storage.local.get(DEFAULT_SETTINGS);
-    return { ...DEFAULT_SETTINGS, ...stored } as SidmSettings;
+// In-memory mirror of the user's settings so the hot download-capture path can
+// decide AND cancel the browser's own download with no async storage read in
+// front of chrome.downloads.cancel. That await delay used to let the browser
+// commit (especially small / fast) downloads before we could cancel them — so
+// the file downloaded in the browser anyway. Refreshed whenever storage changes.
+let cachedSettings: SidmSettings = { ...DEFAULT_SETTINGS };
+let settingsReady = false;
+
+function refreshSettingsCache(): void {
+    chrome.storage.local.get(DEFAULT_SETTINGS, (stored) => {
+        cachedSettings = { ...DEFAULT_SETTINGS, ...stored } as SidmSettings;
+        settingsReady = true;
+    });
 }
+refreshSettingsCache();
+chrome.storage.onChanged.addListener((_changes, area) => {
+    if (area === 'local') refreshSettingsCache();
+});
 
 function isBypassed(url: string, bypassHosts: string[]): boolean {
     if (bypassHosts.length === 0) return false;
@@ -159,8 +173,22 @@ function describe(item: chrome.downloads.DownloadItem): string {
     return `${item.filename || '(unnamed)'} (${item.fileSize > 0 ? item.fileSize + ' bytes' : 'size unknown'})`;
 }
 
-async function captureDownload(item: chrome.downloads.DownloadItem): Promise<void> {
-    const settings = await getSettings();
+/**
+ * onCreated entry point. Uses the cached settings on a warm service worker so
+ * the cancel inside captureWith fires with zero awaits ahead of it; only a cold
+ * start (settings not loaded yet) pays one async storage read before deciding.
+ */
+function captureDownload(item: chrome.downloads.DownloadItem): void {
+    if (settingsReady) {
+        captureWith(item, cachedSettings);
+    } else {
+        chrome.storage.local.get(DEFAULT_SETTINGS, (stored) => {
+            captureWith(item, { ...DEFAULT_SETTINGS, ...stored } as SidmSettings);
+        });
+    }
+}
+
+function captureWith(item: chrome.downloads.DownloadItem, settings: SidmSettings): void {
     if (!settings.captureEnabled) return;
 
     const url = item.finalUrl || item.url;
@@ -173,14 +201,18 @@ async function captureDownload(item: chrome.downloads.DownloadItem): Promise<voi
         return;
     }
 
-    // Cancel the browser's own download — SIDM is taking over.
-    try {
-        await chrome.downloads.cancel(item.id);
-        await chrome.downloads.erase({ id: item.id });
-    } catch (e) {
-        console.warn('[SIDM] Could not cancel browser download:', e);
-    }
+    // Cancel the browser's own download FIRST — with no await in front of it —
+    // so we win the race against the browser committing the file. Cookies and
+    // headers are gathered afterwards; they don't need to block the cancel.
+    chrome.downloads.cancel(item.id).then(
+        () => { void chrome.downloads.erase({ id: item.id }).catch(() => undefined); },
+        (e) => console.warn('[SIDM] Could not cancel browser download:', e),
+    );
 
+    void forwardToSidm(item, url);
+}
+
+async function forwardToSidm(item: chrome.downloads.DownloadItem, url: string): Promise<void> {
     const cookies = await collectCookies(url);
     const headers: Record<string, string> = {};
     if (item.referrer) headers['Referer'] = item.referrer;
@@ -273,7 +305,7 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.downloads.onCreated.addListener((item) => {
     // onCreated fires before the download starts. We capture here so we can
     // cancel before the browser writes any bytes.
-    captureDownload(item).catch(e => console.error('[SIDM] capture failed:', e));
+    captureDownload(item);
 });
 
 chrome.contextMenus.onClicked.addListener(async (info) => {

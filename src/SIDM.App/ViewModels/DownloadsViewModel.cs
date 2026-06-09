@@ -439,16 +439,36 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
 
     private void ShowProgressDialog(DownloadRowViewModel row)
     {
-        var owner = Application.Current?.MainWindow;
+        // On the browser-capture path, PromptAsync minimizes the main window so
+        // the popup isn't hidden behind it. A window owned by a *minimized*
+        // window doesn't render in WPF — which is why the progress window
+        // failed to appear for browser downloads. Only use the main window as
+        // owner when it's actually a usable owner (visible + not minimized);
+        // otherwise show standalone, mirroring AddDownloadDialog's popup mode.
+        var mw = Application.Current?.MainWindow;
+        var ownerUsable = mw is not null && mw.IsVisible && mw.WindowState != WindowState.Minimized;
+
         var dlg = new DownloadProgressDialog(
             row,
             _engine,
             onCancelConfirmed: () => RemoveRowAsync(row, deleteFile: true))
         {
-            Owner = owner,
+            Owner = ownerUsable ? mw : null,
+            ShowInTaskbar = !ownerUsable,
+            WindowStartupLocation = ownerUsable
+                ? WindowStartupLocation.CenterOwner
+                : WindowStartupLocation.CenterScreen,
         };
         dlg.Show();
         dlg.Activate();
+
+        if (!ownerUsable)
+        {
+            // Bring it above the browser that triggered the download, then drop
+            // Topmost so it doesn't pin over everything afterwards.
+            dlg.Topmost = true;
+            dlg.Topmost = false;
+        }
     }
 
     /// <summary>
