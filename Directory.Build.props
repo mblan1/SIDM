@@ -12,9 +12,9 @@
     <Product>SIDM</Product>
     <Company>Snw</Company>
     <Authors>Snw</Authors>
-    <Version>0.1.32</Version>
-    <FileVersion>0.1.32.0</FileVersion>
-    <AssemblyVersion>0.1.32.0</AssemblyVersion>
+    <Version>0.1.33</Version>
+    <FileVersion>0.1.33.0</FileVersion>
+    <AssemblyVersion>0.1.33.0</AssemblyVersion>
     <Copyright>Copyright (c) Snw</Copyright>
   </PropertyGroup>
 

@@ -11,16 +11,46 @@
         <button id="settings-btn" title="Open settings">⚙</button>
     </header>
 
-    <section id="empty" hidden>
-        <p class="muted">No video streams detected on this page.</p>
-        <p class="hint">Play the video so the player loads its manifest, then reopen this popup.</p>
+    <!-- Connection status to the SIDM desktop app. -->
+    <section id="status-card" class="status-card checking">
+        <span class="dot"></span>
+        <div class="status-body">
+            <span id="conn-text" class="conn-text">Checking connection…</span>
+            <span id="conn-detail" class="conn-detail muted"></span>
+        </div>
+        <button id="recheck-btn" title="Re-check connection">↻</button>
     </section>
 
-    <section id="list-section">
+    <!-- Master switch. When off, the browser downloads normally (no SIDM). -->
+    <section id="toggle-row">
+        <label class="switch">
+            <input type="checkbox" id="capture-toggle" />
+            <span class="slider"></span>
+        </label>
+        <div class="toggle-text">
+            <span class="toggle-label">Download with SIDM</span>
+            <span id="toggle-hint" class="toggle-hint muted"></span>
+        </div>
+    </section>
+
+    <!-- Shown only when the connected app bundles a newer extension. Lets the
+         user apply it without visiting chrome://extensions. -->
+    <section id="update-banner" hidden>
+        <span id="update-text" class="update-text"></span>
+        <button id="reload-btn" class="reload-btn">Reload now</button>
+    </section>
+
+    <!-- Video streams sniffed on the current page (secondary). -->
+    <section id="list-section" hidden>
+        <h2 class="section-title">Video on this page</h2>
         <ul id="manifests"></ul>
+    </section>
+    <section id="empty" class="empty" hidden>
+        <span class="muted">No video streams detected on this page.</span>
     </section>
 
     <footer>
+        <span id="version" class="muted"></span>
         <span id="status" class="muted"></span>
     </footer>
     <script type="module" src="popup.js"></script>

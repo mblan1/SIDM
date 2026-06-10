@@ -111,33 +111,66 @@ public sealed class RangeProbe : IRangeProbe
         IReadOnlyDictionary<string, string>? cookies,
         CancellationToken cancellationToken)
     {
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+
+        // Phase A: HEAD. Cheapest path — well-behaved servers (GitHub release
+        // assets, signed S3 links) return Content-Disposition on a HEAD, so
+        // we can recover the real name without touching the body.
         try
         {
-            var client = _httpClientFactory.CreateClient(HttpClientName);
             using var head = await SendAsync(client, HttpMethod.Head, url, requestHeaders, cookies,
                 range: null, cancellationToken);
-
-            // Prefer the Content-Disposition filename — that's the only
-            // reliable source for CDN-redirect URLs (GitHub release assets,
-            // signed S3 links) whose path ends in an opaque id. Only return
-            // it when it actually came from the header; the URL-segment
-            // fallback is the caller's job (and is what we're trying to
-            // improve on).
             if (head.IsSuccessStatusCode)
             {
-                var cd = head.Content.Headers.ContentDisposition;
-                var name = (cd?.FileNameStar ?? cd?.FileName)?.Trim().Trim('"');
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    return name;
-                }
+                var fromHead = FileNameFromDisposition(head.Content.Headers.ContentDisposition);
+                if (fromHead is not null) return fromHead;
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "Filename HEAD probe failed for {Url}", url);
         }
+
+        // Phase B: ranged GET (bytes=0-0). Many file hosts — notably the
+        // link-shortener → CDN shape (e.g. vnshort.com/<id> → cdn/<sha256>) —
+        // emit Content-Disposition only on a GET, never on a HEAD. That's why
+        // the browser gets the right name and a HEAD-only probe doesn't. We
+        // ask for a single byte and read headers only (ResponseHeadersRead +
+        // immediate dispose), so the body is never downloaded.
+        try
+        {
+            using var get = await SendAsync(client, HttpMethod.Get, url, requestHeaders, cookies,
+                range: new RangeHeaderValue(0, 0), cancellationToken);
+            if (get.IsSuccessStatusCode)
+            {
+                var fromGet = FileNameFromDisposition(get.Content.Headers.ContentDisposition);
+                if (fromGet is not null) return fromGet;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Filename GET probe failed for {Url}", url);
+        }
+
+        // Nothing better than the URL guess — that's the caller's fallback.
         return null;
+    }
+
+    /// <summary>
+    /// Extracts a bare, safe file name from a <c>Content-Disposition</c>
+    /// header, or null when it carries no usable name. Strips any directory
+    /// component a misbehaving server might embed (<c>../</c>, drive paths)
+    /// so the result is always a single path segment.
+    /// </summary>
+    private static string? FileNameFromDisposition(ContentDispositionHeaderValue? cd)
+    {
+        var name = (cd?.FileNameStar ?? cd?.FileName)?.Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        // Defend against a server stuffing a path into the header — keep only
+        // the final segment regardless of '/' or '\' separators.
+        name = Path.GetFileName(name.Replace('\\', '/'));
+        return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
     private static async Task<HttpResponseMessage> SendAsync(

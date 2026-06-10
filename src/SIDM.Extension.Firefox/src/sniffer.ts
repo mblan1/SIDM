@@ -124,10 +124,15 @@ export function installSniffer(): void {
             const kind = classify(details.url, contentType);
             if (!kind) return;
 
+            // `initiator` is the only origin Chrome exposes here (scheme+host,
+            // no path); Firefox additionally provides `documentUrl` (the full
+            // document URL). The latter isn't in @types/chrome, so read it
+            // defensively — undefined on Chrome, a real fallback on Firefox.
+            const documentUrl = (details as { documentUrl?: string }).documentUrl;
             const manifest: SniffedManifest = {
                 kind,
                 url: details.url,
-                pageUrl: details.initiator ?? details.documentUrl ?? '',
+                pageUrl: details.initiator ?? documentUrl ?? '',
                 capturedAt: Date.now(),
             };
             record(details.tabId, manifest).catch(e =>

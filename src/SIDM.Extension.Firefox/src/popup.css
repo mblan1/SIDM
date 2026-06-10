@@ -44,16 +44,215 @@ section {
     padding: 12px;
 }
 
-#empty p {
-    margin: 0 0 6px 0;
-}
-
 .muted {
     opacity: 0.7;
 }
 
-.hint {
+/* --- Connection status card --------------------------------------------- */
+
+.status-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+    background: color-mix(in srgb, CanvasText 4%, transparent);
+}
+
+.status-card .dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #9aa0a6;
+}
+
+.status-card.ok .dot {
+    background: #1ea672;
+    box-shadow: 0 0 0 3px color-mix(in srgb, #1ea672 25%, transparent);
+}
+
+.status-card.bad .dot {
+    background: #e5484d;
+    box-shadow: 0 0 0 3px color-mix(in srgb, #e5484d 25%, transparent);
+}
+
+.status-card.checking .dot {
+    background: #f5a623;
+    animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.status-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.conn-text {
+    font-weight: 600;
+}
+
+.conn-detail {
     font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#recheck-btn {
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    color: inherit;
+    padding: 4px 6px;
+    border-radius: 4px;
+    opacity: 0.7;
+}
+
+#recheck-btn:hover {
+    background: color-mix(in srgb, CanvasText 8%, transparent);
+    opacity: 1;
+}
+
+/* --- Master enable/disable switch --------------------------------------- */
+
+#toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 12px 12px;
+}
+
+.toggle-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.toggle-label {
+    font-weight: 600;
+}
+
+.toggle-hint {
+    font-size: 11px;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    width: 40px;
+    height: 22px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch .slider {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    border-radius: 22px;
+    background: color-mix(in srgb, CanvasText 25%, transparent);
+    transition: background 0.15s ease;
+}
+
+.switch .slider::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    left: 3px;
+    top: 3px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s ease;
+}
+
+.switch input:checked + .slider {
+    background: #1ea672;
+}
+
+.switch input:checked + .slider::before {
+    transform: translateX(18px);
+}
+
+.switch input:focus-visible + .slider {
+    outline: 2px solid color-mix(in srgb, CanvasText 40%, transparent);
+    outline-offset: 2px;
+}
+
+/* --- Update-available banner -------------------------------------------- */
+
+#update-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 12px 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: color-mix(in srgb, #1ea672 16%, transparent);
+    border: 1px solid color-mix(in srgb, #1ea672 35%, transparent);
+}
+
+.update-text {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.reload-btn {
+    flex-shrink: 0;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: #1ea672;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+}
+
+.reload-btn:hover {
+    background: color-mix(in srgb, #1ea672 85%, black);
+}
+
+.reload-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* --- Video streams list ------------------------------------------------- */
+
+.section-title {
+    margin: 0 0 8px 0;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.6;
+}
+
+#list-section, #empty {
+    border-top: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+}
+
+.empty {
+    font-size: 12px;
 }
 
 ul {
@@ -104,11 +303,15 @@ li:hover {
 }
 
 footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     padding: 8px 12px;
     border-top: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
     min-height: 18px;
 }
 
-#status {
+footer span {
     font-size: 11px;
 }

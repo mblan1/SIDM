@@ -19,29 +19,76 @@ import {
     NATIVE_HOST_ID,
 } from './ipc';
 import { installSniffer } from './sniffer';
+import { isExtensionOutdated } from './version';
 
 const CLIENT_NAME = 'SIDM-Chrome-Extension';
 const CLIENT_VERSION = chrome.runtime.getManifest().version;
 
+// --- Auto-update -----------------------------------------------------------
+//
+// SIDM ships the extension as an unpacked folder it overwrites on its own
+// updates. The running extension only picks up new files on chrome.runtime
+// .reload(). We trigger that reload automatically (on Chrome startup and on
+// every native handshake), then confirm it with a notification afterwards.
+//
+// chrome.runtime.reload() wipes all in-memory state, so the "we just updated"
+// fact is carried across the reload in storage: tryAutoUpdate() writes a marker
+// before reloading; announceUpdateIfApplied() reads it on the next boot, fires
+// the notification once the running version matches the target, and clears it.
+
+const UPDATE_MARKER = 'sidm.update.pending';
+
+interface UpdateMarker {
+    from: string;
+    to: string;
+}
+
 /**
- * Returns true when SIDM bundles a strictly newer extension than the one
- * currently loaded. Plain dotted-int compare ("0.1.16" < "0.1.17";
- * "0.2.0" > "0.1.99"). Pre-release suffixes fall back to ordinal compare
- * on the leftover — close enough for the upgrade signal.
+ * Reloads the extension when the connected app reports a newer bundled version.
+ * Idempotent + loop-safe: if a previous attempt for this exact from→to pair is
+ * still pending (we reloaded but the on-disk files weren't newer yet), it does
+ * nothing rather than spin. onStartup clears a stale marker so a fresh browser
+ * session retries once.
  */
-function isExtensionOutdated(installed: string, bundled: string): boolean {
-    if (!installed || !bundled || installed === bundled) return false;
-    const splitNums = (v: string): number[] =>
-        v.split(/[^0-9]+/).filter(s => s.length > 0).map(s => parseInt(s, 10));
-    const a = splitNums(installed);
-    const b = splitNums(bundled);
-    const len = Math.max(a.length, b.length);
-    for (let i = 0; i < len; i++) {
-        const x = a[i] ?? 0;
-        const y = b[i] ?? 0;
-        if (x !== y) return x < y;
+async function tryAutoUpdate(bundledVersion: string | undefined): Promise<void> {
+    if (!bundledVersion || !isExtensionOutdated(CLIENT_VERSION, bundledVersion)) return;
+
+    const { [UPDATE_MARKER]: marker } = await chrome.storage.local.get(UPDATE_MARKER);
+    const m = marker as UpdateMarker | undefined;
+    if (m && m.from === CLIENT_VERSION && m.to === bundledVersion) {
+        // Already tried this upgrade and we're still on the old version — the
+        // new files aren't on disk yet. Wait for the next Chrome start.
+        return;
     }
-    return installed < bundled;
+
+    console.log(`[SIDM] Auto-update: v${CLIENT_VERSION} → v${bundledVersion}; reloading`);
+    await chrome.storage.local.set({ [UPDATE_MARKER]: { from: CLIENT_VERSION, to: bundledVersion } });
+    chrome.runtime.reload();
+}
+
+/**
+ * Runs on every service-worker boot. If we reloaded for an update and the new
+ * version is now live, notify the user once and clear the marker. A marker left
+ * by a no-op reload (version unchanged) is kept so tryAutoUpdate's guard stops
+ * it from looping; onStartup is what eventually clears it.
+ */
+async function announceUpdateIfApplied(): Promise<void> {
+    const { [UPDATE_MARKER]: marker } = await chrome.storage.local.get(UPDATE_MARKER);
+    const m = marker as UpdateMarker | undefined;
+    if (!m) return;
+    if (CLIENT_VERSION !== m.from) {
+        await chrome.storage.local.remove(UPDATE_MARKER);
+        notifyUpdated(CLIENT_VERSION);
+    }
+}
+
+function notifyUpdated(version: string): void {
+    chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'data:image/svg+xml;base64,' + btoa(MINIMAL_ICON_SVG),
+        title: 'SIDM extension updated',
+        message: `Now running v${version}.`,
+    });
 }
 
 interface SidmSettings {
@@ -78,19 +125,12 @@ function ensurePort(): chrome.runtime.Port {
     port.onMessage.addListener((msg: IpcMessage) => {
         if (msg.type === 'hello-response') {
             console.log('[SIDM] Connected to', msg.appName, msg.appVersion);
-            // Self-reload when SIDM bundles a newer extension than the
-            // one Chrome currently has loaded in memory. SIDM's
-            // auto-extract on startup has already overwritten the
-            // unpacked-extension folder with the new files; reloading
-            // makes Chrome pick them up without the user having to
-            // visit chrome://extensions/.
-            if (msg.bundledExtensionVersion &&
-                isExtensionOutdated(CLIENT_VERSION, msg.bundledExtensionVersion)) {
-                console.log(
-                    `[SIDM] Self-reload: installed v${CLIENT_VERSION} < bundled v${msg.bundledExtensionVersion}`);
-                chrome.runtime.reload();
-                return;
-            }
+            // Self-reload when SIDM bundles a newer extension than the one
+            // Chrome currently has loaded in memory. SIDM's auto-extract on
+            // startup has already overwritten the unpacked-extension folder
+            // with the new files; reloading makes Chrome pick them up without
+            // the user having to visit chrome://extensions/.
+            void tryAutoUpdate(msg.bundledExtensionVersion);
         } else if (msg.type === 'download-response') {
             handleDownloadAck(msg);
         } else if (msg.type === 'list-formats-response') {
@@ -357,6 +397,28 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
 // boots; MV3 may evict and respawn the worker any time, but listeners
 // registered at top level get reattached on every wake-up.
 installSniffer();
+
+// On every worker boot, surface a notification if we just reloaded into a
+// newer version (the marker survives the reload in storage).
+void announceUpdateIfApplied();
+
+// Auto-update when Chrome opens: onStartup wakes the worker at browser launch.
+// We clear a stale failed-attempt marker so this fresh session gets one retry,
+// then handshake — the hello-response runs tryAutoUpdate, which reloads if SIDM
+// reports a newer bundled extension. If SIDM isn't running, the connect fails
+// quietly and we simply don't update (there's nothing to update against).
+chrome.runtime.onStartup.addListener(async () => {
+    const { [UPDATE_MARKER]: marker } = await chrome.storage.local.get(UPDATE_MARKER);
+    const m = marker as UpdateMarker | undefined;
+    if (m && m.from === CLIENT_VERSION) {
+        await chrome.storage.local.remove(UPDATE_MARKER);
+    }
+    try {
+        ensurePort();
+    } catch (e) {
+        console.warn('[SIDM] onStartup update check: native host unavailable:', e);
+    }
+});
 
 // Popup → background channel. The popup parks the assembled DownloadRequest
 // (with cookies pre-resolved) here and we forward it through the existing

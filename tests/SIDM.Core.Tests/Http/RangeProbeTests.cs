@@ -167,13 +167,54 @@ public class RangeProbeTests
             requestHeaders: null, cookies: null, CancellationToken.None);
 
         name.Should().Be("go2rtc_win64.zip");
-        handler.Requests.Should().ContainSingle().Which.Method.Should().Be(HttpMethod.Head, "filename probe is HEAD-only");
+        handler.Requests.Should().ContainSingle()
+            .Which.Method.Should().Be(HttpMethod.Head, "a HEAD that yields the name short-circuits the GET fallback");
+    }
+
+    [Fact]
+    public async Task ProbeFileName_falls_back_to_ranged_GET_when_HEAD_lacks_ContentDisposition()
+    {
+        // Link-shortener → CDN shape (the reported vnshort.com/<id> bug): the
+        // HEAD carries no Content-Disposition, but the GET does — which is what
+        // the browser sees and why Chrome gets the right name.
+        var handler = new FakeHttpMessageHandler(req => req.Method == HttpMethod.Head
+            ? HeadResponse(contentLength: 7_000_000, acceptRanges: true) // no CD on HEAD
+            : PartialContentResponse(0, 0, total: 7_000_000,
+                contentDisposition: "attachment; filename=\"007.First.Light.Crack.Only-voices38.7z\""));
+
+        var probe = new RangeProbe(FakeHttpMessageHandler.ToFactory(RangeProbe.HttpClientName, handler), NullLogger<RangeProbe>.Instance);
+
+        var name = await probe.ProbeFileNameAsync(
+            new Uri("https://cdn.example.com/e7bb6a02fd00323697c6a87a5e5f7554e2fadde7b440dc0f42f88268bf5ee266"),
+            requestHeaders: null, cookies: null, CancellationToken.None);
+
+        name.Should().Be("007.First.Light.Crack.Only-voices38.7z");
+        handler.Requests.Should().HaveCount(2, "HEAD had no name, so we fall through to a ranged GET");
+        handler.Requests[1].Method.Should().Be(HttpMethod.Get);
+        handler.Requests[1].Headers.Range!.ToString().Should().Be("bytes=0-0", "only one byte is requested — headers are all we need");
+    }
+
+    [Fact]
+    public async Task ProbeFileName_strips_path_components_from_ContentDisposition()
+    {
+        // A misbehaving server embeds a path; we must keep only the last segment.
+        var handler = new FakeHttpMessageHandler(req => req.Method == HttpMethod.Head
+            ? HeadResponse(contentLength: 10, acceptRanges: true,
+                contentDisposition: "attachment; filename=\"../../etc/evil.7z\"")
+            : new HttpResponseMessage(HttpStatusCode.MethodNotAllowed));
+
+        var probe = new RangeProbe(FakeHttpMessageHandler.ToFactory(RangeProbe.HttpClientName, handler), NullLogger<RangeProbe>.Instance);
+
+        var name = await probe.ProbeFileNameAsync(TestUrl, null, null, CancellationToken.None);
+
+        name.Should().Be("evil.7z");
     }
 
     [Fact]
     public async Task ProbeFileName_returns_null_when_no_ContentDisposition()
     {
-        // No Content-Disposition → null (caller keeps its own URL guess).
+        // No Content-Disposition on either HEAD or GET → null (caller keeps its
+        // own URL guess).
         var handler = new FakeHttpMessageHandler(_ => HeadResponse(contentLength: 1, acceptRanges: false));
 
         var probe = new RangeProbe(FakeHttpMessageHandler.ToFactory(RangeProbe.HttpClientName, handler), NullLogger<RangeProbe>.Instance);
@@ -219,7 +260,8 @@ public class RangeProbeTests
         long end,
         long total,
         string? etag = null,
-        string? contentType = null)
+        string? contentType = null,
+        string? contentDisposition = null)
     {
         var bodyLength = (int)(end - start + 1);
         var resp = new HttpResponseMessage(HttpStatusCode.PartialContent)
@@ -231,6 +273,7 @@ public class RangeProbeTests
         resp.Headers.AcceptRanges.Add("bytes");
         if (etag is not null) resp.Headers.ETag = new EntityTagHeaderValue(etag);
         if (contentType is not null) resp.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        if (contentDisposition is not null) resp.Content.Headers.ContentDisposition = ContentDispositionHeaderValue.Parse(contentDisposition);
         return resp;
     }
 }
