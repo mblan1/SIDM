@@ -223,6 +223,15 @@ public sealed class RangeProbe : IRangeProbe
             return name.Trim('"');
         }
 
+        // A filename embedded in the query (presigned CDN links — S3
+        // response-content-disposition, Hugging Face Xet) beats the opaque path
+        // segment such links use (a content hash with no extension).
+        var fromQuery = FileNameResolver.FromUrlQuery(url);
+        if (!string.IsNullOrWhiteSpace(fromQuery))
+        {
+            return fromQuery;
+        }
+
         var pathName = Path.GetFileName(url.AbsolutePath);
         return string.IsNullOrWhiteSpace(pathName) ? null : Uri.UnescapeDataString(pathName);
     }

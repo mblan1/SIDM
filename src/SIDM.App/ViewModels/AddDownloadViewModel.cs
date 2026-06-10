@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SIDM.Core.Http;
 using SIDM.VideoGrabber;
 using SIDM.VideoGrabber.Dash;
 using SIDM.VideoGrabber.Hls;
@@ -121,7 +122,19 @@ public partial class AddDownloadViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(url)) return "";
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return "";
         var name = Path.GetFileName(uri.AbsolutePath);
-        return string.IsNullOrWhiteSpace(name) ? "download.bin" : Uri.UnescapeDataString(name);
+        name = string.IsNullOrWhiteSpace(name) ? "" : Uri.UnescapeDataString(name);
+
+        // When the path segment is an opaque id (no extension / hash / GUID),
+        // the real name is often embedded in the query — the presigned-CDN
+        // shape (S3 response-content-disposition, Hugging Face Xet) where the
+        // path is a content hash. Prefer that over the useless path segment.
+        if (LooksUnreliableFileName(name))
+        {
+            var fromQuery = FileNameResolver.FromUrlQuery(uri);
+            if (!string.IsNullOrWhiteSpace(fromQuery)) return fromQuery!;
+        }
+
+        return string.IsNullOrWhiteSpace(name) ? "download.bin" : name;
     }
 
     /// <summary>

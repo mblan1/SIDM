@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using SIDM.App.Services;
 using SIDM.App.Views;
 using SIDM.Core.Abstractions;
+using SIDM.Core.Http;
 using SIDM.Core.Models;
 using SIDM.Core.Persistence;
 using SIDM.Ipc;
@@ -245,20 +246,33 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             // Pick the best filename we can. Priority:
             //   1) what the extension captured (seed.FileName), if reliable,
             //   2) the URL's last path segment, if reliable,
-            //   3) a HEAD probe of Content-Disposition (recovers the real
-            //      name for CDN-redirect URLs like GitHub release assets,
-            //      whose path ends in a GUID — the reported bug).
+            //   3) a filename embedded in the URL query — presigned CDN links
+            //      (S3 response-content-disposition, Hugging Face Xet) whose
+            //      path is a content hash but whose query carries the real name.
+            //      Network-free, so it's tried before the probe.
+            //   4) a HEAD/ranged-GET probe of Content-Disposition (recovers the
+            //      real name for CDN-redirect URLs like GitHub release assets,
+            //      whose path ends in a GUID — the originally reported bug).
             var candidate = !string.IsNullOrWhiteSpace(seed.FileName)
                 ? seed.FileName!
                 : AddDownloadViewModel.GuessFileNameFromUrl(seed.Url);
             var recovered = false;
             if (AddDownloadViewModel.LooksUnreliableFileName(candidate))
             {
-                var better = await TryRecoverFileNameAsync(seed);
-                if (!string.IsNullOrWhiteSpace(better))
+                var fromQuery = FileNameResolver.FromUrlQuery(seed.Url);
+                if (!string.IsNullOrWhiteSpace(fromQuery))
                 {
-                    candidate = better!;
+                    candidate = fromQuery!;
                     recovered = true;
+                }
+                else
+                {
+                    var better = await TryRecoverFileNameAsync(seed);
+                    if (!string.IsNullOrWhiteSpace(better))
+                    {
+                        candidate = better!;
+                        recovered = true;
+                    }
                 }
             }
             dialog.ViewModel.FileName = candidate;
