@@ -219,14 +219,10 @@ public partial class App : Application
         var tray = _host.Services.GetRequiredService<Services.TrayIconService>();
         tray.Initialize(mainWindow);
 
-        if (_startHidden)
-        {
-            // Cold launch just to capture a browser download — keep the main
-            // window hidden and show a tray cue while the IPC download arrives
-            // and opens the Add-download dialog.
-            tray.ShowOpeningCue();
-        }
-        else
+        // For a cold launch that just captures a browser download, keep the
+        // main window hidden — the IPC download arrives and opens the
+        // Add-download dialog. Only show the window for a normal manual launch.
+        if (!_startHidden)
         {
             mainWindow.Show();
         }

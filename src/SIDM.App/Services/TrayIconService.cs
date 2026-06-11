@@ -133,20 +133,6 @@ public sealed class TrayIconService : IDisposable
     /// </summary>
     public void ShowMainWindow() => RestoreMainWindow();
 
-    /// <summary>
-    /// Shows an "Opening SIDM…" tray balloon. Used on a cold launch that was
-    /// triggered by a browser download (no main window), so the user gets a
-    /// visible cue that SIDM is starting up before the download dialog appears.
-    /// </summary>
-    public void ShowOpeningCue()
-    {
-        if (_notifyIcon is null) return;
-        _notifyIcon.BalloonTipTitle = "Opening SIDM…";
-        _notifyIcon.BalloonTipText = "Preparing your download.";
-        _notifyIcon.BalloonTipIcon = WinForms.ToolTipIcon.Info;
-        _notifyIcon.ShowBalloonTip(4_000);
-    }
-
     private void RestoreMainWindow()
     {
         if (_mainWindow is null) return;

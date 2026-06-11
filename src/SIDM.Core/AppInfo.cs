@@ -4,6 +4,6 @@ public static class AppInfo
 {
     public const string Name = "SIDM";
     public const string DisplayName = "Snw Internet Download Manager";
-    public const string Version = "0.1.34";
+    public const string Version = "0.1.35";
     public const string LocalAppDataFolder = "SIDM";
 }
