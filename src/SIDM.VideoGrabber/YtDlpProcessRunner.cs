@@ -44,6 +44,14 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
             RedirectStandardError = true,
             UseShellExecute = false,
             WorkingDirectory = request.OutputDirectory,
+            // yt-dlp emits UTF-8 on stdout/stderr. Without pinning these, .NET
+            // decodes with the console code page, so the `after_move:filepath`
+            // line (which becomes the row's TargetPath) gets mangled for any
+            // non-ASCII filename — the file downloads fine but "Open file" then
+            // points at a name that doesn't exist. Force UTF-8 so the recovered
+            // path matches what yt-dlp actually wrote.
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         BuildArgs(psi.ArgumentList, request);
 
@@ -125,6 +133,10 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
+            // The -J info dump (and video titles within) is UTF-8; read it as
+            // such so accented / CJK titles aren't corrupted in the picker.
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         // -J → dump full info as JSON to stdout. --no-warnings keeps stderr
         // quiet so we don't mis-attribute non-fatal stuff to a real error.

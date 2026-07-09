@@ -20,6 +20,20 @@ public partial class DownloadCompletedDialog : FluentWindow
 
     private void OnOpenFile(object sender, RoutedEventArgs e)
     {
+        if (!File.Exists(_targetPath))
+        {
+            var folder = Path.GetDirectoryName(_targetPath);
+            var choice = System.Windows.MessageBox.Show(this,
+                $"The file isn't at its recorded location — it may have been moved, renamed, or removed:\n\n{_targetPath}\n\nOpen the containing folder instead?",
+                "Snw Internet Download Manager",
+                System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
+            if (choice == System.Windows.MessageBoxResult.Yes
+                && !string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
+            {
+                try { Process.Start("explorer.exe", $"\"{folder}\""); Close(); } catch { /* best effort */ }
+            }
+            return;
+        }
         try
         {
             Process.Start(new ProcessStartInfo(_targetPath) { UseShellExecute = true });

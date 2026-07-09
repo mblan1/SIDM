@@ -89,6 +89,14 @@ public partial class FilePropertiesDialog : FluentWindow
 
     private void OnOpenFile(object sender, RoutedEventArgs e)
     {
+        if (!File.Exists(_row.TargetPath))
+        {
+            System.Windows.MessageBox.Show(this,
+                $"The file isn't at its recorded location — it may have been moved, renamed, or removed:\n\n{_row.TargetPath}",
+                "Snw Internet Download Manager",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            return;
+        }
         try
         {
             Process.Start(new ProcessStartInfo(_row.TargetPath) { UseShellExecute = true });
