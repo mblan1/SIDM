@@ -25,6 +25,7 @@ internal sealed class DownloadConfiguration : IEntityTypeConfiguration<Download>
         b.Property(x => x.ErrorMessage).HasMaxLength(2048);
         b.Property(x => x.Manifest).HasColumnType("TEXT");
         b.Property(x => x.SelectedYtDlpFormat).HasMaxLength(256);
+        b.Property(x => x.SelectedAudioFormat).HasMaxLength(16);
 
         b.Property(x => x.Status).HasConversion<int>();
         b.Property(x => x.Priority).HasConversion<int>();

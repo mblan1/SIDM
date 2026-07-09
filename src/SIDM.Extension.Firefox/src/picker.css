@@ -99,6 +99,27 @@ main {
     margin: 8px 0 4px;
 }
 
+/* "Convert to" audio-format selector above the audio list. */
+.audio-format-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: var(--muted);
+}
+.audio-format-row select {
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--row);
+    color: var(--fg);
+    font: inherit;
+    cursor: pointer;
+}
+
 .format-list { list-style: none; margin: 0; padding: 0; }
 
 .format-row {

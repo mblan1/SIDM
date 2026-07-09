@@ -224,13 +224,29 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
         args.Add("-f");
         args.Add(request.FormatSelector ?? "bestvideo*+bestaudio/best");
 
-        // Force a single .mp4 output when the chosen format is video+audio
-        // that yt-dlp has to merge (i.e. selectors using +bestaudio, or
-        // any DASH-only video stream). Without this, yt-dlp picks
-        // .mkv / .webm and — worse — falls back to keeping the streams
-        // SEPARATE when ffmpeg isn't on PATH, producing two files.
-        args.Add("--merge-output-format");
-        args.Add("mp4");
+        if (!string.IsNullOrWhiteSpace(request.AudioFormat))
+        {
+            // Audio-only download with conversion: extract the chosen stream and
+            // transcode it into the requested container (mp3/m4a/opus/flac/wav…).
+            // Needs ffmpeg. No mp4 merge — there's no video track to merge, and
+            // --audio-quality 0 asks for best quality (VBR for lossy codecs;
+            // ignored for lossless flac/wav).
+            args.Add("-x");
+            args.Add("--audio-format");
+            args.Add(request.AudioFormat!);
+            args.Add("--audio-quality");
+            args.Add("0");
+        }
+        else
+        {
+            // Force a single .mp4 output when the chosen format is video+audio
+            // that yt-dlp has to merge (i.e. selectors using +bestaudio, or
+            // any DASH-only video stream). Without this, yt-dlp picks
+            // .mkv / .webm and — worse — falls back to keeping the streams
+            // SEPARATE when ffmpeg isn't on PATH, producing two files.
+            args.Add("--merge-output-format");
+            args.Add("mp4");
+        }
 
         if (!string.IsNullOrWhiteSpace(request.FfmpegPath))
         {

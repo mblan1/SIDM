@@ -48,6 +48,13 @@ export interface DownloadRequest {
     ytDlpFormat?: string;
     /** Human-readable label for the chosen format ("1080p MP4 · ~145 MB"). */
     ytDlpFormatLabel?: string;
+    /**
+     * Target audio container for an audio-only download — "mp3", "m4a",
+     * "opus", "flac", "wav", etc. Set by the picker's "Convert to" selector;
+     * SIDM runs yt-dlp with `-x --audio-format <fmt>` to transcode. Absent for
+     * video or a raw (unconverted) audio stream.
+     */
+    ytDlpAudioFormat?: string;
 }
 
 export interface DownloadResponse {

@@ -32,7 +32,12 @@ public sealed record YtDlpRunRequest(
     string YtDlpPath,
     string? FfmpegPath = null,
     string? FormatSelector = null,
-    string? OutputFileNameStem = null);
+    string? OutputFileNameStem = null,
+    /// <summary>Target audio container for an audio-only extraction — e.g.
+    /// "mp3", "m4a", "opus", "flac", "wav". When set, yt-dlp runs with
+    /// <c>-x --audio-format &lt;fmt&gt;</c> (requires ffmpeg) and the mp4 merge is
+    /// skipped. Null → keep the raw stream / normal video download.</summary>
+    string? AudioFormat = null);
 
 /// <summary>Terminal outcome.</summary>
 /// <param name="Success">True when yt-dlp exited 0 and we recorded a final file path.</param>

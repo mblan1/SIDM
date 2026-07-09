@@ -297,6 +297,11 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
                     : seed.YtDlpFormatLabel;
                 dialog.ViewModel.YtDlpFormatLabel = label;
             }
+            // Audio-only "Convert to <fmt>" choice from the picker, if any.
+            if (!string.IsNullOrWhiteSpace(seed.YtDlpAudioFormat))
+            {
+                dialog.ViewModel.YtDlpAudioFormat = seed.YtDlpAudioFormat;
+            }
 
             // Pre-fill the folder: priority is
             //   1) explicitly-remembered folder for this extension (user's history),
@@ -418,6 +423,7 @@ public partial class DownloadsViewModel : ObservableObject, IDownloadIntake
             HeadersJson = headers is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(headers) : null,
             CookiesJson = seed?.Cookies is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(seed.Cookies) : null,
             SelectedYtDlpFormat = string.IsNullOrEmpty(vm.YtDlpFormat) ? null : vm.YtDlpFormat,
+            SelectedAudioFormat = string.IsNullOrWhiteSpace(vm.YtDlpAudioFormat) ? null : vm.YtDlpAudioFormat,
         };
 
         long id;

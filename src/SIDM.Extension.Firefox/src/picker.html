@@ -35,6 +35,18 @@
             </div>
             <div class="group">
                 <h2>Audio only</h2>
+                <div class="audio-format-row">
+                    <label for="audio-format">Convert to</label>
+                    <select id="audio-format">
+                        <option value="">Original (no conversion)</option>
+                        <option value="mp3">MP3</option>
+                        <option value="m4a">M4A (AAC)</option>
+                        <option value="opus">Opus</option>
+                        <option value="vorbis">Vorbis (OGG)</option>
+                        <option value="flac">FLAC (lossless)</option>
+                        <option value="wav">WAV (lossless)</option>
+                    </select>
+                </div>
                 <ul id="audio-list" class="format-list"></ul>
                 <p id="audio-empty" class="empty" hidden>No audio-only formats reported.</p>
             </div>

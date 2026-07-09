@@ -5,8 +5,8 @@
  *     YouTube's settings gear / fullscreen icon). This is the "true overlay
  *     on the video" the user asks for and survives all SPA navigations
  *     because YouTube re-uses the same #movie_player container.
- *   - Fallback: a floating button anchored to the top-right of the viewport,
- *     for hosts whose player chrome we don't have a hand-tuned selector for.
+ *   - Other hosts get no injected button — the right-click "Download video /
+ *     audio with SIDM…" context menu covers them instead.
  *
  * No framework, no observer libraries. We poll once a second for up to 30 s
  * after each navigation — YouTube's player is built up over several frames
@@ -56,8 +56,8 @@ const PLACEMENTS: Record<string, PlacementRule[]> = {
         { container: '.player .vp-controls' , inPlayer: true },
     ],
     // Twitch / TikTok / Dailymotion / Facebook / Instagram all vary too
-    // much site-to-site for a hand-tuned selector; the floating-overlay
-    // fallback covers them.
+    // much site-to-site for a hand-tuned selector; use the right-click
+    // "Download video / audio with SIDM…" menu on those.
 };
 
 function makePlayerChromeButton(): HTMLButtonElement {
@@ -131,83 +131,6 @@ function makePillButton(): HTMLButtonElement {
     return btn;
 }
 
-function makeFloatingButton(): HTMLButtonElement {
-    const btn = makePillButton();
-    Object.assign(btn.style, {
-        position: 'fixed',
-        top: '16px',
-        right: '16px',
-        zIndex: '2147483647',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-    } as Partial<CSSStyleDeclaration>);
-    makeDraggable(btn);
-    return btn;
-}
-
-/**
- * Let the user reposition the floating button by dragging it. A movement
- * threshold separates a real drag from a click, and a capturing click handler
- * swallows the trailing click after a drag so repositioning never fires the
- * download action.
- */
-function makeDraggable(el: HTMLElement): void {
-    const DRAG_THRESHOLD = 4; // px of movement before a press counts as a drag
-    let startX = 0, startY = 0, originLeft = 0, originTop = 0;
-    let pointerId = -1;
-    let dragging = false;
-    let moved = false;
-
-    el.style.touchAction = 'none';
-    el.style.cursor = 'grab';
-
-    el.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0) return;
-        const rect = el.getBoundingClientRect();
-        originLeft = rect.left;
-        originTop = rect.top;
-        startX = e.clientX;
-        startY = e.clientY;
-        pointerId = e.pointerId;
-        dragging = true;
-        moved = false;
-        el.setPointerCapture(pointerId);
-    });
-
-    el.addEventListener('pointermove', (e) => {
-        if (!dragging || e.pointerId !== pointerId) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        if (!moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
-        moved = true;
-        e.preventDefault();
-        // Anchor by left/top while dragging; clear right/bottom so they don't fight.
-        const left = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, originLeft + dx));
-        const top = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, originTop + dy));
-        el.style.left = `${left}px`;
-        el.style.top = `${top}px`;
-        el.style.right = 'auto';
-        el.style.bottom = 'auto';
-        el.style.cursor = 'grabbing';
-    });
-
-    const endDrag = (e: PointerEvent) => {
-        if (!dragging || e.pointerId !== pointerId) return;
-        dragging = false;
-        el.style.cursor = 'grab';
-        if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
-    };
-    el.addEventListener('pointerup', endDrag);
-    el.addEventListener('pointercancel', endDrag);
-
-    el.addEventListener('click', (e) => {
-        if (moved) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            moved = false;
-        }
-    }, true);
-}
-
 function onClick(e: Event) {
     e.preventDefault();
     e.stopPropagation();
@@ -266,30 +189,10 @@ function tryPlace(): boolean {
         }
     }
 
-    // Floating fallback (any site without a hand-tuned placement). Only when
-    // the page has a reasonably-sized <video> — a real player, not a tiny
-    // inline preview / autoplay thumbnail — so the button doesn't litter
-    // every page that happens to embed a small clip.
-    if (hasRealVideo()) {
-        try {
-            document.body.appendChild(makeFloatingButton());
-            LOG('injected floating fallback (no host placement matched)');
-            return true;
-        } catch (err) {
-            console.warn('[SIDM] floating fallback failed:', err);
-        }
-    }
+    // No hand-tuned placement matched. We deliberately do NOT drop a floating
+    // button on generic sites — for those, use the right-click "Download video
+    // / audio with SIDM…" context menu instead.
     return false;
-}
-
-// True when the page has a video element at least ~320px wide (a genuine
-// player). Guards the floating button on broad all-sites injection.
-function hasRealVideo(): boolean {
-    const videos = Array.from(document.querySelectorAll('video'));
-    return videos.some(v => {
-        const r = v.getBoundingClientRect();
-        return r.width >= 320 && r.height >= 180;
-    });
 }
 
 let lastUrl = location.href;

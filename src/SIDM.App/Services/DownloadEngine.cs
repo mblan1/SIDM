@@ -371,7 +371,10 @@ public sealed class DownloadEngine
             // User-picked format selector from the browser-overlay format
             // picker (null = let yt-dlp pick its default).
             FormatSelector: download.SelectedYtDlpFormat,
-            OutputFileNameStem: fileNameStem);
+            OutputFileNameStem: fileNameStem,
+            // Target audio container for an audio-only convert (mp3/m4a/…);
+            // null for video downloads or a raw audio stream.
+            AudioFormat: download.SelectedAudioFormat);
 
         YtDlpRunResult result;
         try

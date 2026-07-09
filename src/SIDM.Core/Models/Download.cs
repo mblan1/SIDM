@@ -36,5 +36,15 @@ public class Download
     /// </summary>
     public string? SelectedYtDlpFormat { get; set; }
 
+    /// <summary>
+    /// Target audio container for an audio-only yt-dlp download — e.g.
+    /// <c>"mp3"</c>, <c>"m4a"</c>, <c>"opus"</c>, <c>"flac"</c>, <c>"wav"</c>.
+    /// When set, the engine passes <c>-x --audio-format &lt;fmt&gt;</c> so yt-dlp
+    /// extracts/transcodes the chosen stream to that format (needs ffmpeg).
+    /// Null means "keep the raw stream" (video downloads, or audio with no
+    /// conversion). Set by the browser-overlay picker's "Convert to" selector.
+    /// </summary>
+    public string? SelectedAudioFormat { get; set; }
+
     public List<Segment> Segments { get; set; } = [];
 }

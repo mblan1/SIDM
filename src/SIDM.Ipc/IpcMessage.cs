@@ -61,7 +61,15 @@ public sealed record DownloadRequestMessage(
     /// what they're about to download. Null when <see cref="YtDlpFormat"/>
     /// is null.
     /// </summary>
-    string? YtDlpFormatLabel = null) : IpcMessage;
+    string? YtDlpFormatLabel = null,
+    /// <summary>
+    /// Optional target audio format for an audio-only download (e.g. "mp3",
+    /// "m4a", "opus", "flac", "wav"). When set, the engine passes
+    /// <c>-x --audio-format &lt;fmt&gt;</c> to yt-dlp so the chosen audio stream
+    /// is extracted/converted to that container (needs ffmpeg). Null for video
+    /// or a raw audio stream with no conversion.
+    /// </summary>
+    string? YtDlpAudioFormat = null) : IpcMessage;
 
 public sealed record DownloadResponseMessage(long DownloadId, string Status) : IpcMessage;
 

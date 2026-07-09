@@ -50,6 +50,13 @@ public partial class AddDownloadViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowSegments))]
     private string? _ytDlpFormatLabel;
 
+    /// <summary>Target audio container for an audio-only download (e.g. "mp3").
+    /// Set by the picker's "Convert to" selector; round-trips into
+    /// <see cref="Download.SelectedAudioFormat"/> on accept. Null for video or a
+    /// raw audio stream.</summary>
+    [ObservableProperty]
+    private string? _ytDlpAudioFormat;
+
     /// <summary>Drives the visibility of the format row.</summary>
     public bool HasYtDlpFormat => !string.IsNullOrEmpty(YtDlpFormat) && !string.IsNullOrEmpty(YtDlpFormatLabel);
 

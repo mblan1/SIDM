@@ -26,6 +26,7 @@ const $pageTitle = document.getElementById('page-title')!;
 const $pageUrl = document.getElementById('page-url')!;
 const $retry = document.getElementById('retry') as HTMLButtonElement;
 const $cancel = document.getElementById('cancel') as HTMLButtonElement;
+const $audioFormat = document.getElementById('audio-format') as HTMLSelectElement;
 
 $pageUrl.textContent = videoUrl;
 $cancel.addEventListener('click', () => window.close());
@@ -99,10 +100,22 @@ function render(resp: ListFormatsResponse) {
 }
 
 function pick(f: FormatOption) {
+    // For an audio-only row, honour the "Convert to" selector. Video rows keep
+    // their container regardless of the audio selector.
+    const audioFormat =
+        f.kind === 'audio' && $audioFormat.value ? $audioFormat.value : undefined;
+
+    // The saved file's extension is the target container when converting,
+    // otherwise the source stream's own ext.
+    const outExt = audioFormat ?? f.ext;
+
     // Pretty label that survives the round-trip into the AddDownloadDialog's
-    // "Format: …" row. Includes size when known.
+    // "Format: …" row. When converting, the source size no longer matches the
+    // output, so show the target format instead of a misleading size.
     const sizeLabel = f.fileSize ? ` · ${fmtBytes(f.fileSize)}` : '';
-    const prettyLabel = `${f.label} · ${f.ext.toUpperCase()}${sizeLabel}`;
+    const prettyLabel = audioFormat
+        ? `${f.label} → ${audioFormat.toUpperCase()}`
+        : `${f.label} · ${f.ext.toUpperCase()}${sizeLabel}`;
 
     // Use the video title as the file name so the dialog shows something
     // meaningful (not "download.bin"). Sanitize characters Windows forbids
@@ -112,7 +125,7 @@ function pick(f: FormatOption) {
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 120);
-    const fileName = safeTitle ? `${safeTitle}.${f.ext}` : undefined;
+    const fileName = safeTitle ? `${safeTitle}.${outExt}` : undefined;
 
     const request: DownloadRequest = {
         type: 'download',
@@ -120,11 +133,13 @@ function pick(f: FormatOption) {
         fileName,
         ytDlpFormat: f.formatId,
         ytDlpFormatLabel: prettyLabel,
+        ytDlpAudioFormat: audioFormat,
         userAgent: navigator.userAgent,
         referer: videoUrl,
         // ext drives the AddDownloadDialog's filename guess + folder memory.
         mime: undefined,
-        expectedLength: f.fileSize,
+        // A transcode changes the size, so don't seed a wrong total.
+        expectedLength: audioFormat ? undefined : f.fileSize,
     };
 
     chrome.runtime.sendMessage(
