@@ -46,6 +46,19 @@ function fmtBytes(bytes?: number): string {
     return `${v.toFixed(1)} ${units[u]}`;
 }
 
+// Fold a title down to plain ASCII so the saved filename has no encoding
+// pitfalls: map the Vietnamese letters that don't decompose (đ ơ ư), strip
+// combining diacritics via NFD, drop anything still non-ASCII. "Tìm em" →
+// "Tim em". Keeps SIDM's recorded path and yt-dlp's output name identical.
+function asciiFold(s: string): string {
+    return s
+        .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+        .replace(/ơ/g, 'o').replace(/Ơ/g, 'O')
+        .replace(/ư/g, 'u').replace(/Ư/g, 'U')
+        .normalize('NFD')            // split accented letters into base + mark
+        .replace(/[^\x00-\x7F]/g, ''); // drop marks and any other non-ASCII
+}
+
 function metaLine(f: FormatOption): string {
     const parts: string[] = [];
     if (f.ext) parts.push(f.ext);
@@ -120,7 +133,7 @@ function pick(f: FormatOption) {
     // Use the video title as the file name so the dialog shows something
     // meaningful (not "download.bin"). Sanitize characters Windows forbids
     // in filenames; fall back to a generic name if there's no title.
-    const safeTitle = (videoTitle ?? '')
+    const safeTitle = asciiFold(videoTitle ?? '')
         .replace(/[\\/:*?"<>|]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()

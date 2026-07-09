@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace SIDM.VideoGrabber;
@@ -53,6 +55,7 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
+        ForceUtf8Io(psi);
         BuildArgs(psi.ArgumentList, request);
 
         _logger.LogInformation("Starting yt-dlp for {Url} → {Dir}", request.Url, request.OutputDirectory);
@@ -138,6 +141,7 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
+        ForceUtf8Io(psi);
         // -J → dump full info as JSON to stdout. --no-warnings keeps stderr
         // quiet so we don't mis-attribute non-fatal stuff to a real error.
         // --no-playlist makes a playlist URL probe ONLY the first video,
@@ -271,20 +275,67 @@ public sealed class YtDlpProcessRunner : IYtDlpRunner
     }
 
     /// <summary>
+    /// Forces the child yt-dlp process to use UTF-8 for its stdio regardless of
+    /// the machine's locale. yt-dlp (frozen Python) otherwise prints the
+    /// <c>after_move:filepath</c> line in the Windows ANSI code page, which —
+    /// read back as UTF-8 — corrupts any non-ASCII path. These env vars are the
+    /// canonical way to pin a Python process to UTF-8.
+    /// </summary>
+    private static void ForceUtf8Io(ProcessStartInfo psi)
+    {
+        psi.Environment["PYTHONUTF8"] = "1";
+        psi.Environment["PYTHONIOENCODING"] = "utf-8";
+    }
+
+    /// <summary>
     /// Makes a caller-supplied filename safe for a yt-dlp <c>-o</c> template:
+    /// folds it to plain ASCII (so "Hoàng - Tìm em" → "Hoang - Tim em"), then
     /// strips path separators, characters Windows forbids, and (critically)
-    /// <c>%</c> so the stem can't be parsed as a yt-dlp output field. Trims to
-    /// a sane length. Falls back to "video" if nothing usable remains.
+    /// <c>%</c> so the stem can't be parsed as a yt-dlp output field. ASCII
+    /// output also sidesteps every stdout-encoding pitfall — the saved name and
+    /// the path yt-dlp reports back always match. Trims to a sane length; falls
+    /// back to "video" if nothing usable remains.
     /// </summary>
     private static string SanitizeStem(string stem)
     {
         // Drop any extension the caller left on (we append %(ext)s ourselves).
         stem = Path.GetFileNameWithoutExtension(stem);
+        stem = AsciiFold(stem);
         var cleaned = new string(stem
             .Where(c => c != '%' && !Path.GetInvalidFileNameChars().Contains(c))
-            .ToArray())
-            .Trim();
+            .ToArray());
+        // Collapse the runs of whitespace that fold/strip can leave behind.
+        cleaned = string.Join(' ', cleaned.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         if (cleaned.Length > 120) cleaned = cleaned[..120].Trim();
         return string.IsNullOrWhiteSpace(cleaned) ? "video" : cleaned;
+    }
+
+    /// <summary>
+    /// Transliterates a string to plain ASCII: maps the Vietnamese letters that
+    /// don't decompose (đ ơ ư), strips combining diacritics via NFD, and drops
+    /// any remaining non-ASCII. "Tìm em" → "Tim em"; "đường" → "duong".
+    /// </summary>
+    private static string AsciiFold(string s)
+    {
+        var pre = new StringBuilder(s.Length);
+        foreach (var ch in s)
+        {
+            pre.Append(ch switch
+            {
+                'đ' => "d", 'Đ' => "D",
+                'ơ' => "o", 'Ơ' => "O",
+                'ư' => "u", 'Ư' => "U",
+                _ => ch.ToString(),
+            });
+        }
+
+        var decomposed = pre.ToString().Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(decomposed.Length);
+        foreach (var c in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
+            if (c < 128) sb.Append(c); // drop anything still non-ASCII (CJK, emoji…)
+        }
+        return sb.ToString();
     }
 }
